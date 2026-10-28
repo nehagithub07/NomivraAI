@@ -3,6 +3,7 @@ import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { getSupabaseConfig } from "./config";
+import type { Database } from "./database.types";
 
 export async function createClient({
   writable = false,
@@ -10,7 +11,7 @@ export async function createClient({
   const config = getSupabaseConfig();
   if (!config) throw new Error("Supabase Auth is not configured.");
   const cookieStore = await cookies();
-  return createServerClient(config.url, config.key, {
+  return createServerClient<Database>(config.url, config.key, {
     global: {
       fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }),
     },

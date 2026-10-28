@@ -53,7 +53,11 @@ export async function updateSession(request: NextRequest) {
   }
 
   let target: URL | null = null;
-  if (!authenticated && isProtectedPath(request.nextUrl.pathname)) {
+  // Return an action error without navigating away and losing the trip form.
+  // GETs remain protected; the action itself verifies the current user.
+  const tripAction = request.nextUrl.pathname === "/trips/new" &&
+    request.method === "POST" && request.headers.has("next-action");
+  if (!authenticated && isProtectedPath(request.nextUrl.pathname) && !tripAction) {
     target = new URL("/login", request.url);
     target.searchParams.set("next", next);
   } else if (

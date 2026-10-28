@@ -1,32 +1,20 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { ArrowLeft, Plane } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/nomvira/empty-state";
 import { PageHeader } from "@/components/nomvira/layout/page-header";
+import { CreateTripWizard } from "@/components/nomvira/trips/create-trip-wizard";
+import { requireUser } from "@/lib/auth/session";
+import { todayInTimeZone } from "@/lib/trips/dates";
 
 export const metadata: Metadata = { title: "Create Trip" };
 
-export default function CreateTripPage() {
+export default async function CreateTripPage({ searchParams }: {
+  searchParams: Promise<{ destination?: string | string[] }>;
+}) {
+  await requireUser();
+  const destination = (await searchParams).destination;
   return (
     <>
-      <PageHeader
-        title="Create Trip"
-        description="The beginning of somewhere new."
-      />
-      <EmptyState
-        icon={Plane}
-        title="Good journeys take a little preparation."
-        description="Trip creation is coming soon. This will be the place to turn your travel ideas into a journey."
-        action={
-          <Button asChild variant="secondary">
-            <Link href="/trips">
-              <ArrowLeft aria-hidden="true" />
-              Back to My Trips
-            </Link>
-          </Button>
-        }
-      />
+      <PageHeader title="Create a new trip" description="Tell NomviraAI about your journey." />
+      <CreateTripWizard initialDestination={typeof destination === "string" ? destination.trim().slice(0, 160) : ""} initialToday={todayInTimeZone("UTC")} />
     </>
   );
 }

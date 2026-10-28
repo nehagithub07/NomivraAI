@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, ArrowUpRight, Luggage } from "lucide-react";
+import { ArrowRight, Luggage } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SectionHeading } from "@/components/nomvira/section-heading";
 import { SurfaceCard } from "@/components/nomvira/surface-card";
@@ -8,11 +8,9 @@ import { formatTripDates } from "@/lib/travel-format";
 
 export function RecentTripCard({ trip }: { trip: RecentTrip }) {
   return (
-    <SurfaceCard variant="interactive">
-      <Link
-        href={`/trips/${trip.id}`}
-        aria-label={`Revisit ${trip.destination}, ${trip.country}`}
-        className="flex min-w-0 items-center gap-4 rounded-xl p-4 focus-visible:outline-offset-[-3px]"
+    <SurfaceCard>
+      <div
+        className="flex min-w-0 items-center gap-4 rounded-xl p-4"
       >
         <span className="hidden size-14 shrink-0 items-center justify-center rounded-lg bg-muted sm:flex">
           <Luggage
@@ -39,11 +37,7 @@ export function RecentTripCard({ trip }: { trip: RecentTrip }) {
             {trip.status}
           </Badge>
         </div>
-        <ArrowUpRight
-          className="size-4 shrink-0 text-muted-foreground"
-          aria-hidden="true"
-        />
-      </Link>
+      </div>
     </SurfaceCard>
   );
 }
@@ -54,6 +48,7 @@ export function RecentTrips({ trips }: { trips: RecentTrip[] }) {
       <SectionHeading
         id="recent-trips-title"
         title="Recent trips"
+        description="Sample journeys for inspiration."
         trailing={
           <Link
             href="/trips"

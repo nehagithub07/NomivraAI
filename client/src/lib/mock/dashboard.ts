@@ -1,23 +1,5 @@
 export type TravelVisual = { src: string; alt: string };
 
-export type UpcomingTrip = {
-  id: string;
-  destination: string;
-  country: string;
-  startDate: string;
-  endDate: string;
-  days: number;
-  travelers: number;
-  currency: string;
-  totalBudget: number;
-  budgetUsed: number;
-  weatherTemperature: number;
-  weatherCondition: string;
-  activitiesPlanned: number;
-  status: "Planning" | "Upcoming";
-  visual: TravelVisual;
-};
-
 export type RecommendedDestination = {
   id: string;
   destination: string;
@@ -40,7 +22,6 @@ export type RecentTrip = {
 
 export type DashboardData = {
   user: { firstName: string };
-  upcomingTrip: UpcomingTrip | null;
   recommendations: RecommendedDestination[];
   recentTrips: RecentTrip[];
   insight: { title: string; description: string; destination: string };
@@ -49,26 +30,6 @@ export type DashboardData = {
 // Presentation fixtures only. No live prices, forecasts, bookings, or personalization.
 export const dashboardMock: DashboardData = {
   user: { firstName: "Kartavya" },
-  upcomingTrip: {
-    id: "tokyo-spring",
-    destination: "Tokyo",
-    country: "Japan",
-    startDate: "2027-04-12",
-    endDate: "2027-04-18",
-    days: 6,
-    travelers: 2,
-    currency: "USD",
-    totalBudget: 2200,
-    budgetUsed: 1280,
-    weatherTemperature: 22,
-    weatherCondition: "Partly cloudy",
-    activitiesPlanned: 14,
-    status: "Planning",
-    visual: {
-      src: "/destinations/tokyo.svg",
-      alt: "Original illustration of a quiet Tokyo skyline, a tower, and Mount Fuji in spring.",
-    },
-  },
   recommendations: [
     {
       id: "kyoto",
@@ -123,7 +84,7 @@ export const dashboardMock: DashboardData = {
       country: "USA",
       startDate: "2026-05-14",
       endDate: "2026-05-19",
-      days: 5,
+      days: 6,
       status: "Completed",
     },
     {
@@ -132,7 +93,7 @@ export const dashboardMock: DashboardData = {
       country: "USA",
       startDate: "2026-02-07",
       endDate: "2026-02-10",
-      days: 3,
+      days: 4,
       status: "Completed",
     },
   ],
@@ -144,10 +105,9 @@ export const dashboardMock: DashboardData = {
   },
 };
 
-// Set upcomingTrip to null to show the first-trip state. This preset also removes history.
+// The development empty preset removes the sample history.
 export const emptyDashboardMock: DashboardData = {
   ...dashboardMock,
-  upcomingTrip: null,
   recentTrips: [],
   insight: {
     ...dashboardMock.insight,
@@ -155,20 +115,3 @@ export const emptyDashboardMock: DashboardData = {
   },
 };
 
-// Shared by the lightweight trip-route placeholders; no trip workspace is implemented.
-export const mockTripDestinations = [
-  ...(dashboardMock.upcomingTrip
-    ? [
-        {
-          id: dashboardMock.upcomingTrip.id,
-          destination: dashboardMock.upcomingTrip.destination,
-          country: dashboardMock.upcomingTrip.country,
-        },
-      ]
-    : []),
-  ...dashboardMock.recentTrips.map(({ id, destination, country }) => ({
-    id,
-    destination,
-    country,
-  })),
-];

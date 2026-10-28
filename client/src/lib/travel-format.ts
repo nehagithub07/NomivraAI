@@ -19,3 +19,10 @@ export function formatTravelCurrency(amount: number, currency = "USD") {
     maximumFractionDigits: 0,
   }).format(amount);
 }
+
+export function formatTripBudget(amount: number | string, currency: string) {
+  const value = Number(amount);
+  return `${new Intl.NumberFormat("en-US", {
+    style: "currency", currency, minimumFractionDigits: Number.isInteger(value) ? 0 : 2, maximumFractionDigits: 2,
+  }).format(value)} ${currency}`;
+}

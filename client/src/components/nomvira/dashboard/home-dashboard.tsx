@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/nomvira/empty-state";
 import { SectionHeading } from "@/components/nomvira/section-heading";
+import { SurfaceCard } from "@/components/nomvira/surface-card";
+import type { TripRow } from "@/lib/supabase/database.types";
 import type { DashboardData } from "@/lib/mock/dashboard";
 import { DestinationSearch } from "./destination-search";
 import { UpcomingTripCard } from "./upcoming-trip-card";
@@ -19,7 +21,7 @@ function DashboardGreeting({ firstName }: { firstName: string }) {
           Welcome back, {firstName}
         </p>
         <Badge variant="outline" className="bg-transparent font-normal">
-          Sample dashboard
+          Explore your next chapter
         </Badge>
       </div>
       <h1 className="type-page max-w-3xl text-[1.75rem] text-balance md:text-[2rem] xl:text-[2.5rem]">
@@ -47,13 +49,20 @@ export function DashboardEmptyState() {
   );
 }
 
-export function HomeDashboard({ data }: { data: DashboardData }) {
+export function HomeDashboard({ data, upcomingTrip, upcomingError = false }: {
+  data: DashboardData; upcomingTrip: TripRow | null; upcomingError?: boolean;
+}) {
   return (
     <div className="min-w-0">
       <DashboardGreeting firstName={data.user.firstName} />
       <DestinationSearch />
       <div className="mt-10 space-y-10 md:mt-12 md:space-y-12">
-        {data.upcomingTrip ? (
+        {upcomingError ? (
+          <SurfaceCard className="p-6" role="alert">
+            <p className="type-body">We couldn&apos;t load your upcoming trip. Please try again.</p>
+            <Link href="/trips" className="type-small mt-3 inline-flex min-h-11 items-center gap-2 font-medium">Go to My Trips<ArrowRight className="size-4" aria-hidden="true" /></Link>
+          </SurfaceCard>
+        ) : upcomingTrip ? (
           <section aria-labelledby="upcoming-trip-title">
             <SectionHeading
               id="upcoming-trip-title"
@@ -68,7 +77,7 @@ export function HomeDashboard({ data }: { data: DashboardData }) {
                 </Link>
               }
             />
-            <UpcomingTripCard trip={data.upcomingTrip} />
+            <UpcomingTripCard trip={upcomingTrip} />
           </section>
         ) : (
           <DashboardEmptyState />
@@ -80,8 +89,8 @@ export function HomeDashboard({ data }: { data: DashboardData }) {
         </div>
       </div>
       <p className="type-meta mt-8 text-muted-foreground">
-        A preview of journeys to come. Trips, budgets, weather, and
-        recommendations are sample data.
+        Your upcoming trip uses your saved details. Recommendations, insights,
+        and recent trip examples are sample content.
       </p>
     </div>
   );
