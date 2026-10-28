@@ -5,6 +5,7 @@ import { Compass, LoaderCircle, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SurfaceCard } from "@/components/nomvira/surface-card";
 import { normalizedPlaceSchema, type NormalizedPlace } from "@/lib/destinations/validation";
+import { discoveryErrorMessage } from "@/lib/destinations/discovery-errors";
 import { z } from "zod";
 import { ProviderAttribution } from "./provider-attribution";
 
@@ -19,10 +20,15 @@ export function DestinationPlaces({ tripId, canDiscover, initialPlaces, loadFail
     setLoading(true); setError(undefined);
     try {
       const response = await fetch(`/api/trips/${tripId}/discover-places`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-      if (!response.ok) throw new Error();
+      if (!response.ok) {
+        const failure = z.object({ error: z.object({ code: z.string().max(80) }) }).safeParse(await response.json().catch(() => null));
+        const code = failure.success ? failure.data.error.code : response.status === 401 ? "unauthorized" : response.status === 429 ? "provider_rate_limited" : undefined;
+        setError(discoveryErrorMessage(code));
+        return;
+      }
       const data = z.object({ places: z.array(normalizedPlaceSchema).max(30) }).parse(await response.json());
       setPlaces(data.places); setSearched(true);
-    } catch { setError("We couldn't load places right now. Your trip is safe — please try again."); }
+    } catch { setError(discoveryErrorMessage(undefined)); }
     finally { setLoading(false); lock.current = false; }
   }
   return <SurfaceCard size="panel" className="mt-6 min-w-0 p-5 sm:p-8">

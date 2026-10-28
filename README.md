@@ -1,6 +1,6 @@
 # NomviraAI client — Steps 1–6
 
-A light design system, responsive application shell, Home dashboard, Supabase authentication, and a Create Trip Wizard with user-owned PostgreSQL data. Step 6 uses Open-Meteo Geocoding for destinations and OpenStreetMap Overpass for attractions through Python/FastAPI. No Google Maps key or billing is required. Public no-key access is for current non-commercial development, subject to provider terms and fair use. Follow [AUTH_SETUP.md](AUTH_SETUP.md), [TRIPS_SETUP.md](TRIPS_SETUP.md), and [backend/README.md](backend/README.md) for setup. Itinerary generation remains future work.
+A light design system, responsive application shell, Home dashboard, Supabase authentication, and a Create Trip Wizard with user-owned PostgreSQL data. Step 6 uses Open-Meteo Geocoding for destinations and OpenStreetMap Overpass for attractions through Python/FastAPI. Step 7 adds a hotel recommendation engine with a StayAPI adapter, explicit development fixtures, deterministic ranking, local filters/sorts and a trip-owned selected stay. No Google Maps key or billing is required. Public no-key destination access is for current non-commercial development, subject to provider terms and fair use. Follow [AUTH_SETUP.md](AUTH_SETUP.md), [TRIPS_SETUP.md](TRIPS_SETUP.md), and [backend/README.md](backend/README.md) for setup. Itinerary generation remains future work.
 
 ## Run locally
 
@@ -20,6 +20,7 @@ npm run build
 npm run test:auth
 npm run test:trips
 npm run test:destinations
+npm run test:accommodations
 ```
 
 ## Foundation
@@ -74,7 +75,7 @@ The seven steps are **Destination → Dates → Travelers → Budget → Interes
 
 See [TRIPS_SETUP.md](TRIPS_SETUP.md) for migration deployment, existing legacy-table preservation, all columns/policies/indexes, and manual type alignment. See [STEP5_REPORT.md](STEP5_REPORT.md) for the file list and verification results.
 
-If destination search works but creating a trip fails after the Step 6 upgrade, run `npm run db:prepare`. Run the generated private `.qa/setup-trip-database.sql` in your Supabase SQL Editor to install missing Step 6 migrations and configure the matching database secret atomically. The command prepares the file without changing the hosted database; see [backend/README.md](backend/README.md#database-migration-and-deployment). Recent destination searches are cached in memory to avoid repeated provider and authentication requests.
+If creating a trip or saving a stay needs a database setup update, run `npm run db:prepare`. Run the generated private `.qa/setup-trip-database.sql` in your Supabase SQL Editor to install missing Step 6/7 migrations and configure the matching database secret atomically. The command prepares the file without changing the hosted database; see [backend/README.md](backend/README.md#database-migration-and-deployment). Existing trips are retained. Recent destination searches are cached in memory to avoid repeated provider and authentication requests.
 
 ## Authentication
 
@@ -87,3 +88,9 @@ If destination search works but creating a trip fails after the Step 6 upgrade, 
 - Run `npm run test:auth` for nine tests covering redirects, validation, masking, privacy-safe recovery responses, and identity fallbacks. Browser tooling remains isolated in ignored `.qa`. Live email/OAuth/session round trips must be verified after configuring the external project; helper/UI checks alone do not establish that the providers work.
 
 Step 6 adds `GeocodingProvider`/`PlacesProvider` interfaces with Open-Meteo/Overpass adapters, authenticated BFF routes, accessible search, and deliberate attraction discovery. Trip Overview reuses persisted cards without provider calls on render. [backend/README.md](backend/README.md) documents the internal key, forward migration, provider terms/attribution, limits and both development servers. [STEP6_REPORT.md](STEP6_REPORT.md) records implementation and verification. No profile database, onboarding, or additional authentication providers were added.
+
+## Hotel recommendations
+
+Open a saved trip and choose **Hotels**. **Find stays** performs a deliberate search; filters and all five sorts operate on the loaded candidates. Cards keep star classification separate from guest scores and prioritize known total-stay quotes. Replacement asks for confirmation. The selected stay is visible on Hotels and Overview and remains saved when temporary quotes expire.
+
+Local development is configured for clearly labeled demo accommodations without any StayAPI requests. For live inventory, configure `STAYAPI_API_KEY` and `ACCOMMODATION_PROVIDER=stayapi` in **backend/.env**, then restart FastAPI. The key never belongs in the root environment or browser. Production disables fixture search. Read [Accommodation Engine setup](backend/README.md#accommodation-engine) and [STEP7_REPORT.md](STEP7_REPORT.md) for quota behavior, ranking assumptions, storage policy and verification limits. Apply migration `20261028000400_accommodation_selections.sql` before saving a stay; `db:prepare` includes it automatically.

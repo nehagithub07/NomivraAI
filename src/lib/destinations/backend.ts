@@ -25,7 +25,9 @@ export async function callTravelApi<T>(endpoint: "destinations/search" | "places
     });
   } catch { throw new TravelError("provider_unavailable", searching ? "Destination search is temporarily unavailable." : "We couldn't load places right now. Your trip is safe."); }
   if (!response.ok) {
-    throw new TravelError("provider_unavailable", searching ? "Destination search is temporarily unavailable. Please try again." : "We couldn't load places right now. Your trip is safe.", response.status === 429 ? 429 : 503);
+    // Keep trusted error categories; never forward raw upstream bodies or messages.
+    const limited = response.status === 429;
+    throw new TravelError(limited ? "provider_rate_limited" : "provider_unavailable", searching ? "Destination search is temporarily unavailable. Please try again." : "We couldn't load places right now. Your trip is safe.", limited ? 429 : 503);
   }
   try { return schema.parse(await response.json()); }
   catch { throw new TravelError("invalid_provider_response", searching ? "Destination search is temporarily unavailable." : "We couldn't load places right now. Your trip is safe."); }

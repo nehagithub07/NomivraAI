@@ -235,7 +235,12 @@ def test_node_way_relation_normalization_dedupe_distance_and_metadata():
         query = parse_qs(request.content.decode())["data"][0]
         assert "around:10000" in query
         assert "[timeout:18]" in query
+        assert "[maxsize:67108864]" in query
         assert "out tags center" in query
+        # Each type filter must finish before the separate output statement.
+        assert "node.candidates;out body 40;" in query
+        assert "way.candidates;out tags center 40;" in query
+        assert "relation.candidates;out tags center 40;" in query
         assert "restaurant" not in query
         assert "out geom" not in query
         return httpx.Response(

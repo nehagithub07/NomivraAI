@@ -14,8 +14,9 @@ const SheetDescription = DialogPrimitive.Description;
 function SheetContent({
   children,
   className,
+  closeLabel = "Close navigation",
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content>) {
+}: React.ComponentProps<typeof DialogPrimitive.Content> & { closeLabel?: string }) {
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-foreground/20" />
@@ -31,7 +32,7 @@ function SheetContent({
         <DialogPrimitive.Close asChild>
           <IconButton
             variant="ghost"
-            aria-label="Close navigation"
+            aria-label={closeLabel}
             className="absolute top-6 right-2"
           >
             <X aria-hidden="true" />

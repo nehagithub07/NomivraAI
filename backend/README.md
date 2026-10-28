@@ -85,10 +85,11 @@ Apply migrations **once in timestamp order**, through the existing Supabase migr
 1. `20261028000100_create_trips.sql` — Step 5.
 2. `20261028000200_destination_intelligence.sql` — historical Step 6 foundation, needed by the forward migration.
 3. `20261028000300_open_destination_providers.sql` — provider-neutral/open-provider replacement.
+4. `20261028000400_accommodation_selections.sql` — Step 7 owned stay selections and restricted signed RPC.
 
 If 1 and 2 are already installed, apply only 3. Do not rerun old migrations after the new schema is installed. No connected production schema is modified automatically by this code change.
 
-For a local app whose database is still at Step 5 or the historical Step 6 schema, run `npm.cmd run db:prepare` from the repository root. It creates ignored `.qa/setup-trip-database.sql` using the internal key already in `.env.local`. Run that complete file in the matching project's Supabase SQL Editor as database owner. It installs only the missing Step 6 stages, sets the private database key, and reloads the REST schema in one transaction. It preserves existing trips and can be rerun after a successful setup. The generated file contains a real secret; keep it private. Do not commit or paste it into chat. `db:prepare` only prepares the file; it does not connect to or modify Supabase.
+For a local app whose database is still at Step 5 or an earlier Step 6/7 schema, run `npm.cmd run db:prepare` from the repository root. It creates ignored `.qa/setup-trip-database.sql` using the internal key already in `.env.local`. Run that complete file in the matching project's Supabase SQL Editor as database owner. It installs only the missing Step 6/7 stages, sets the private database key, and reloads the REST schema in one transaction. It preserves existing trips and can be rerun after a successful setup. The generated file contains a real secret; keep it private. Do not commit or paste it into chat. `db:prepare` only prepares the file; it does not connect to or modify Supabase.
 
 The forward migration renames `destination_place_id` to `destination_provider_id` and formatted address to `destination_display_name`; it adds provider, country/code, admin1/admin2, feature code and population. Existing coordinates/timezone/enrichment fields are reused. New trips save canonical `destination_name`, display name and all useful normalized Open-Meteo metadata. The Google-only workaround requiring a separate trip-name field is removed. Older trips keep their names and data; previous IDs are tagged as legacy Google IDs and never sent to open-provider endpoints. Unresolved/legacy destinations remain readable with discovery disabled. Re-confirming a saved legacy trip's destination is not added here.
 
@@ -126,11 +127,13 @@ Search uses 300ms debounce and starts at three characters. Abort/sequence guards
 
 Autocomplete queries are not persisted or DB-cached. All search caches are bounded, expire, and clear on process/component teardown. First-time searches still depend on the upstream provider's availability and latency. Destination IDs are provider-compatible strings. Country/admin/timezone/population fields may be null. Display names join distinct name/admin1/country parts. Invalid/unavailable IANA timezone becomes null; PostgreSQL computes a date-specific UTC offset from the selected start date when the timezone is available.
 
-Discovery sends a constructed Overpass QL query with `around`, relevant tourism/historic/park/arts-centre tags, an 18s provider timeout and an 8MiB provider memory request. Node output includes coordinates; way/relation output requests center+tags, not full geometry/member lists. Raw output is bounded to at most 60 of each object type (180 total); the normalized app result is ≤30. Unnamed/incomplete records and centers outside the radius are filtered. Categories and metadata tag allowlists are centralized. Results deduplicate by stable provider ID and suppress same-name objects within 50m; the bounded candidate batch is ordered by Haversine distance. Distance is straight-line, not routing/travel time. No expensive entity-resolution engine is added.
+Discovery sends a constructed Overpass QL query with `around`, relevant tourism/historic/park/arts-centre tags, an 18s provider timeout and a 64MiB provider memory request. The memory allowance stays bounded while accommodating the provider's query overhead; 8MiB produced an out-of-memory error in live testing. Each node/way/relation filter ends before its separate output statement, following [Overpass QL statement syntax](https://wiki.openstreetmap.org/wiki/Overpass_API/Overpass_QL). Node output includes coordinates; way/relation output requests center+tags, not full geometry/member lists. Raw output is bounded to at most 60 of each object type (180 total); the normalized app result is ≤30. Unnamed/incomplete records and centers outside the radius are filtered. Categories and metadata tag allowlists are centralized. Results deduplicate by stable provider ID and suppress same-name objects within 50m; the bounded candidate batch is ordered by Haversine distance. Distance is straight-line, not routing/travel time. No expensive entity-resolution engine is added.
 
 Guards: authenticated access, server-derived coordinates, strict Zod/Pydantic input, 4KiB POST bodies, 2KiB query strings, a process-local BFF in-flight set, backend-wide single Overpass request at a time with a 10s start cooldown, and 60 geocoding requests/minute per backend process. No automatic retries, endpoint rotation or page-load discovery occurs. Existing saved candidates are returned without another provider call. These development guards are process-local; run one backend worker and coordinate limits centrally before multi-instance scaling. Redis is not added.
 
 HTTPX uses one shared lifespan client (3s connect/pool, 10s read/write), retaining at most 10 idle connections for up to 60s to reduce repeated TLS connections while typing; geocoding has a 12s absolute budget. Overpass overrides read/write to 22s with a 25s absolute budget; Next allows 30s. Provider 400/429/5xx/timeouts/malformed responses and Overpass partial-error remarks map to safe application errors. Logs contain generated request ID, method, status and elapsed time, not keys, cookies, raw provider bodies or URLs. Cards remain honest: names/categories and distance, without fake ratings, prices, photos or open-now status.
+
+Discovery retains safe error categories through the BFF and UI: provider outages, rate limits/in-progress requests, expired sessions, missing destination details, and persistence failures have distinct recovery messages. Raw provider/database messages are never shown. Public-instance overload can still prevent a first discovery; an already saved trip and its saved candidates remain intact.
 
 ## Validation
 
@@ -149,5 +152,101 @@ npm.cmd run build
 ```
 
 Provider calls are mocked in Python tests and public Overpass is never required in CI. Node tests execute actual BFF/action/domain code with transport adapters; PGlite runs the real PostgreSQL migrations, HMAC functions and RLS locally. Existing ignored `.qa` tooling supplies browser interaction/accessibility checks. See `STEP6_REPORT.md` for exact results, live-provider observations and limits. A live provider smoke test is distinct from a live Supabase trip-creation end-to-end test.
+
+## Accommodation Engine
+
+Step 7 adds `AccommodationProvider`, `StayApiAccommodationProvider`, `FixtureAccommodationProvider`, typed neutral candidates, hard eligibility filters and deterministic recommendation scoring. The Hotels page is `/trips/[tripId]/hotels`; Overview and Hotels are the only trip navigation tabs. This step searches, compares and saves a preference. It does not create reservations, collect payments or use an LLM.
+
+### StayAPI setup and quota
+
+Create an account through [StayAPI's developer site](https://stayapi.com/developers), obtain a key from its dashboard and follow the [authentication documentation](https://stayapi.com/docs/authentication). As checked on 28 October 2026, the developer page describes **50 one-time evaluation requests**, not a recurring monthly free allocation. Check your actual account allowance before using live search. Nothing here subscribes to a plan or purchases credits.
+
+Set these in **backend/.env only**, preserving the existing internal key and destination settings:
+
+```dotenv
+APP_ENV=development
+ACCOMMODATION_PROVIDER=stayapi
+STAYAPI_API_KEY=<your StayAPI key>
+STAYAPI_BASE_URL=https://api.stayapi.com
+ALLOW_DEMO_ACCOMMODATIONS=true
+ACCOMMODATION_CACHE_TTL_SECONDS=900
+ACCOMMODATION_CACHE_MAX_ENTRIES=128
+```
+
+Restart FastAPI after changing environment settings. The real key is sent only from FastAPI to the configured HTTPS StayAPI host using `X-API-Key`; redirects are disabled. It never enters Next.js, root `.env.local`, browser requests, examples or logs.
+
+The adapter uses the documented [destination lookup](https://stayapi.com/docs/endpoints/booking/destinations-lookup) and [hotel search](https://stayapi.com/docs/endpoints/booking/search). It resolves the canonical location name/country/region to a source ID, checks labels against the canonical trip, and rejects ambiguous or wrong-country matches. The Open-Meteo ID is never used as a StayAPI ID or overwritten. Only the first result page is requested, with at most 50 candidates; details/reviews/photos are not fetched for every card. A new location can therefore cost two requests; a recent mapping can reduce that to one.
+
+### Explicit demo mode
+
+For development without credentials, choose:
+
+```dotenv
+APP_ENV=development
+ACCOMMODATION_PROVIDER=fixture
+ALLOW_DEMO_ACCOMMODATIONS=true
+```
+
+The local environment is configured this way. Fixture properties, prices, reviews and amenities are fictional and labeled **Demo accommodation data**; availability stays unknown. No external request is sent. Fixture monetary units are demo constants, not exchange rates or market price estimates. The sample set covers property classes, multiple property types, low/high review counts, missing data, distance and budget edge cases.
+
+When live requests fail, development offers an explicit **Browse demo stays** action if permitted. It sends `demo: true`; it never silently replaces live inventory. Backend authorization requires the development/test environment and `ALLOW_DEMO_ACCOMMODATIONS=true`. Production (`APP_ENV=production`) rejects all fixture searches even with that flag; the production Next.js BFF independently rejects fixture responses and selections. Backend defaults fail closed to production/StayAPI with no key. No OSM lodging fallback is added: its Step 6 public provider was unavailable in live checks, and it cannot supply live hotel prices or availability.
+
+### Trusted request flow and endpoints
+
+| Endpoint | Behavior |
+| --- | --- |
+| `POST /api/v1/accommodations/search` | Internal key required; typed trusted trip context, adult count, rooms, currency and preferences; returns normalized ranked candidates |
+| `GET /api/trips/[tripId]/hotels` | Verified user and owned trip; reads in-memory results only; cache miss makes no provider request |
+| `POST /api/trips/[tripId]/hotels` | Accepts only optional `refresh`/development `demo`; loads authoritative trip through Supabase/RLS, then calls FastAPI |
+| `POST /api/trips/[tripId]/accommodation-selection` | Verifies a user/trip/context-bound signed candidate and calls the restricted selection RPC |
+| `DELETE /api/trips/[tripId]/accommodation-selection` | Removes only the owned trip's expected selection |
+
+All browser-facing responses are private/no-store. A browser cannot override owner, destination, dates, travelers, rooms, budget or currency. Travelers are treated as adults; no children are inferred. Rooms use `ceil(travelers / 2)`, centralized in `src/lib/accommodations/context.ts`. Hotel nights are checkout minus check-in, not inclusive trip days: April 12–18 is six nights. Stays require 1–90 nights and a check-in no earlier than the current date in the canonical destination timezone. Same-day and unresolved trips show a disabled search state.
+
+### Normalization and display honesty
+
+Money uses Python `Decimal` and decimal strings in JSON. The adapter keeps provider-reported guest score/scale, review count and star class separate. Booking source scores use their ten-point scale; an explicitly supplied rating scale is preserved. Missing metadata remains null; malformed IDs/coordinates/money/ratings are rejected or omitted. Unknown/unsupported property types are not forced into `hotel`.
+
+`price.total_price_value`, when returned, is a quoted displayed stay total. It may exclude local charges; no all-in claim is made. `price.amount` without a stay basis is shown as an **advertised price**, never multiplied into a stay total or treated as a nightly rate. Missing nightly prices remain null. Tax inclusion is not assumed from a tax amount. An absent total cannot earn a price/value comparison, and currencies are never converted or mixed in price filtering/sorting. Availability is shown only from an explicit provider flag for the searched stay; saving a preference does not promise bookability.
+
+Source photo rights are not assumed, so the initial adapter leaves photos unset and uses a local, code-rendered accommodation placeholder. The UI supports validated HTTPS source image URLs for a future permitted adapter. A provider booking button appears only for an actual supplied HTTPS Booking.com link; no link is fabricated from a property ID. Live cards credit **StayAPI · Booking.com source**. No review text, guest identity, scraped hotel pages or payment details are collected.
+
+### Recommendation policy
+
+All scores are product heuristics in `app/services/hotel_policy.py` and `hotel_recommendation_service.py`, not trained values. Hard filters run first: sold-out properties, known star classes outside 3–5, supplied guest scores below 0.70, known incompatible accommodation types and known distances over 30km are excluded. Unclassified hostels, apartments and other stays remain eligible with adequate supplied guest scores; unknown rating/class fields remain honestly unknown. Missing type does not invent a match but receives less preference credit.
+
+| Budget style | Suggested accommodation allocation |
+| --- | --- |
+| Budget | 28% of total trip budget |
+| Balanced | 35% |
+| Premium | 48% |
+
+The normal price pool allows 20% above that target. Higher-priced properties can remain when they qualify for Premium using class ≥4, normalized guest score ≥0.80, review confidence ≥0.40 and distance ≤15km. A zero trip budget does not invent an allocation or exclude every property.
+
+| Best Match signal | Weight |
+| --- | --- |
+| Budget fit | 30% |
+| Guest quality | 25% |
+| Location | 20% |
+| Property preference | 15% |
+| Property quality | 10% |
+
+Guest scores normalize by the source scale for scoring only. Review confidence is `min(1, log(1 + count) / log(1001))`; guest quality shrinks toward a 0.70 prior when counts are small or absent. Missing ratings receive a conservative internal signal, never a fabricated displayed rating. Location decays with straight-line Haversine distance. A property's class contributes separately from guest reviews.
+
+One highest overall score receives **Best Match**. **Best Value** combines quality, confidence, distance and relative total cost. **Budget Friendly** needs acceptable quality/confidence and proximity before choosing a low known total. **Best Rated** uses confidence-adjusted guest quality. **Premium** uses class, guest quality and location, never price alone. Ties use stable provider/ID ordering. Explicit guest-rating sort uses normalized numeric rating with confidence as a tie-breaker; recommended/Best Rated use confidence-adjusted quality. Price sorts place unknown or non-comparable currencies last in both directions. All five browser sorts and filters use the loaded pool and make no new search requests.
+
+### Caching, selection storage and provider rights
+
+[StayAPI terms](https://stayapi.com/terms), reviewed 28 October 2026, permit integrating output into customer products within the rights StayAPI holds; third-party material can have separate rights. The implementation chooses conservative storage: no permanent live hotel names, addresses, review scores, photos, prices or availability. Provider destination mappings and normalized inventory stay in bounded process memory, with a default 15-minute lifetime; inventory TTL is configurable from 1 to 30 minutes. Cache keys include verified user, canonical destination, dates, travelers, rooms, currency and actual provider mode. Budget/preference changes can re-rank cached inventory. Concurrent identical searches coalesce; failed requests are not cached as inventory.
+
+UI page loads/reloads, server rendering, selection, sorting and filtering never call StayAPI. Explicit **Find stays** uses recent cache if present. **Refresh prices** deliberately bypasses inventory cache, still reusing the location mapping. Refresh has a 30-second cooldown; cache misses allow six loads/minute/user and two concurrent loads per process. Quota/auth failures pause additional live attempts for 60 seconds, without blocking permitted explicit demo use. HTTPS calls use 3s connect/pool, 15s read/write, 18s per-request and 35s overall search budgets. The Next BFF allows 40s. These controls are process-local; use one backend worker and shared coordination before scaling. No Redis is introduced.
+
+Migration `20261028000400_accommodation_selections.sql` stores a unique primary selection per trip: provider/ID, user-owned search context, selected time and optional **fixture-only** display name. Dynamic prices and availability are absent. Parent-ownership RLS protects reads/deletes; authenticated direct INSERT/UPDATE is revoked. The signed RPC checks verified identity, purpose, expiry and current trip context, locks the parent row, and replaces only the expected existing selection. A changed selection in another tab returns conflict. Invalid input rolls back atomically, and deleting a trip cascades its selection. A browser cannot use a signed candidate for another trip or after changing dates/budget/preferences.
+
+Live selections remain saved after prices expire; their latest name can be shown from valid server cache. Without that cache, the UI shows the saved choice and asks for a deliberate new search for current details. It never refreshes implicitly or presents an old price as current. Fixture selections remain explicitly labeled on Hotels and Overview. Apply the new migration before saving; `npm run db:prepare` produces a single atomic setup file for supported Step 5/6/7 database states and configures the existing internal database secret. The prepared local file contains a secret and must remain private.
+
+### Step 7 verification
+
+Run `npm.cmd run test:accommodations` in addition to the validation commands above. Python tests mock all StayAPI calls; no unit or browser test consumes the evaluation quota. PostgreSQL tests execute the real migration chain, signed selection function, RLS, replacement conflicts, rollback and cascades. Browser evidence under ignored `.qa` covers all five sorts, no-network filtering, demo/quota/empty/error/expired/selected states, keyboard dialogs and six responsive widths. See [STEP7_REPORT.md](../STEP7_REPORT.md) for the final counts, exact files and remaining external setup. A real StayAPI search cannot be claimed until credentials are configured and the integration is smoke-tested with that account.
 
 Primary references: [Open-Meteo geocoding fields and lookup](https://open-meteo.com/en/docs/geocoding-api), [Open-Meteo terms](https://open-meteo.com/en/terms), [Overpass QL](https://wiki.openstreetmap.org/wiki/Overpass_API/Overpass_QL), [public Overpass guidelines](https://dev.overpass-api.de/overpass-doc/en/preface/commons.html), [OSM licensing](https://www.openstreetmap.org/copyright). Stop at destination intelligence; weather, maps, routing, hotels, food recommendations and AI remain later steps.

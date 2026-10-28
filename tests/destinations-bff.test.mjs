@@ -93,6 +93,29 @@ test("discovery uses owned trip coordinates, persists signed results and reuses 
   trip = { destination_provider: null }; assert.equal((await invoke()).status, 409);
   assert.equal(writes, 1);
 });
+
+test("discovery distinguishes provider overload from unavailable and persistence failures", async t => {
+  configure(t);
+  const db = {
+    from() { return this; }, select() { return this; }, eq() { return this; }, order() { return this; },
+    async limit() { return { data: [], error: null }; },
+    async maybeSingle() { return { data: { destination_provider: "open_meteo", destination_provider_id: "1850147", destination_latitude: destination.latitude, destination_longitude: destination.longitude }, error: null }; },
+    async rpc() { return { data: null, error: { message: "PRIVATE DATABASE DETAILS" } }; },
+  };
+  let status = 429;
+  t.mock.method(globalThis, "fetch", async () => status === 200
+    ? Response.json({ latitude: destination.latitude, longitude: destination.longitude, radius_meters: 10000, places: [place] })
+    : new Response("PRIVATE PROVIDER DETAILS", { status }));
+  const { POST } = load("src/app/api/trips/[tripId]/discover-places/route.ts", { db });
+  for (const [upstreamStatus, expectedStatus, code] of [[429, 429, "provider_rate_limited"], [503, 503, "provider_unavailable"], [200, 503, "persistence_unavailable"]]) {
+    status = upstreamStatus;
+    const response = await POST(post(), { params: Promise.resolve({ tripId }) });
+    assert.equal(response.status, expectedStatus);
+    const body = await response.json();
+    assert.equal(body.error.code, code);
+    assert.equal(JSON.stringify(body).includes("PRIVATE"), false);
+  }
+});
 test("create trip verifies user-bound proof and ignores browser coordinate tampering", async t => {
   configure(t); let calls = 0;
   const now = Math.floor(Date.now() / 1000), payload = JSON.stringify({ kind: "destination", user_id: userId, expires_at: now + 3600, resolved_at: now, destination });

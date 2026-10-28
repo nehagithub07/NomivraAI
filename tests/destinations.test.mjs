@@ -4,6 +4,7 @@ import { destinationSearchRequestSchema, discoveryResponseSchema, resolvedDestin
 import { createTripFormSchema, defaultTripValues } from "../src/lib/trips/validation.ts";
 import { signProof, verifyProof } from "../src/lib/destinations/proof.ts";
 import { destination, place } from "./destination-fixtures.mjs";
+import { discoveryErrorMessage } from "../src/lib/destinations/discovery-errors.ts";
 
 test("search query requires 3–100 characters and rejects arbitrary provider parameters", () => {
   assert.equal(destinationSearchRequestSchema.safeParse({ q: " Tokyo ", limit: "8" }).success, true);
@@ -32,4 +33,12 @@ test("discovery response enforces radius, count, OSM IDs, coordinates and tag al
   assert.equal(discoveryResponseSchema.safeParse({ ...value, places: Array(31).fill(place) }).success, false);
   assert.equal(discoveryResponseSchema.safeParse({ ...value, radius_meters: 20001 }).success, false);
   for (const changes of [{ latitude: 91 }, { provider_place_id: "123" }, { distance_km: -1 }, { tags: { phone: "private" } }]) assert.equal(discoveryResponseSchema.safeParse({ ...value, places: [{ ...place, ...changes }] }).success, false);
+});
+
+test("discovery errors explain recovery without showing arbitrary server details", () => {
+  assert.match(discoveryErrorMessage("provider_unavailable"), /service is temporarily unavailable/);
+  assert.match(discoveryErrorMessage("provider_rate_limited"), /wait a little/);
+  assert.match(discoveryErrorMessage("persistence_unavailable"), /found places but couldn't save/);
+  assert.match(discoveryErrorMessage("unauthorized"), /Sign in again/);
+  assert.equal(discoveryErrorMessage("PRIVATE PROVIDER DETAILS"), discoveryErrorMessage(undefined));
 });

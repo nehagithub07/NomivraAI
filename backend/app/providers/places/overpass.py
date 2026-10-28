@@ -51,15 +51,15 @@ def build_query(latitude: float, longitude: float, radius: int, limit: int) -> s
     around, count = f"(around:{radius},{latitude:.6f},{longitude:.6f})", min(60, limit * 2)
     # Node body contains coordinates. Tags+center avoids way/relation member lists.
     return (
-        "[out:json][timeout:18][maxsize:8388608];("
+        "[out:json][timeout:18][maxsize:67108864];("
         f'nwr{around}["tourism"~"^(attraction|museum|viewpoint|gallery)$"]["name"];'
         f'nwr{around}["historic"]["historic"!="no"]["name"];'
         f'nwr{around}["leisure"="park"]["name"];'
         f'nwr{around}["amenity"="arts_centre"]["name"];'
         ")->.candidates;"
-        f"node.candidates out body {count};"
-        f"way.candidates out tags center {count};"
-        f"relation.candidates out tags center {count};"
+        f"node.candidates;out body {count};"
+        f"way.candidates;out tags center {count};"
+        f"relation.candidates;out tags center {count};"
     )
 
 

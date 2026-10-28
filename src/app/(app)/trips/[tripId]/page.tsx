@@ -17,6 +17,9 @@ import { DestinationPlaces } from "@/components/nomvira/trips/destination-places
 import { getPersistedPlaces } from "@/lib/destinations/persistence";
 import type { NormalizedPlace } from "@/lib/destinations/validation";
 import { ProviderAttribution } from "@/components/nomvira/trips/provider-attribution";
+import { TripNavigation } from "@/components/nomvira/trips/trip-navigation";
+import { getStaySelection, getCachedHotels } from "@/lib/accommodations/server";
+import { SelectedStaySummary } from "@/components/nomvira/hotels/selected-stay-summary";
 
 type TripPageProps = { params: Promise<{ tripId: string }> };
 
@@ -31,8 +34,11 @@ export default async function TripOverviewPage({ params }: TripPageProps) {
   const trip = await getTrip((await params).tripId);
   if (!trip) notFound();
   const db = await createClient();
-  let places: NormalizedPlace[] = [], placesFailed = false;
-  try { places = await getPersistedPlaces(db, trip.id); } catch { placesFailed = true; }
+  const [placeResult, stayResult] = await Promise.allSettled([getPersistedPlaces(db, trip.id), getStaySelection(db, trip.id)]);
+  const places: NormalizedPlace[] = placeResult.status === "fulfilled" ? placeResult.value : [];
+  const placesFailed = placeResult.status === "rejected";
+  const stay = stayResult.status === "fulfilled" ? stayResult.value : null;
+  const recentStay = stay && getCachedHotels(trip.owner_id, trip)?.candidates.find(candidate => candidate.provider === stay.provider && candidate.provider_accommodation_id === stay.provider_accommodation_id);
   const canDiscover = hasCurrentDestination(trip);
   return (
     <>
@@ -40,6 +46,7 @@ export default async function TripOverviewPage({ params }: TripPageProps) {
       <PageHeader title={trip.destination_name}
         description={`${formatTripDates(trip.start_date, trip.end_date)} · ${durationLabel(tripDuration(trip.start_date, trip.end_date))} · ${travelersLabel(trip.travelers_count)}`}
         actions={<Badge>{optionLabel(trip.status)}</Badge>} />
+      <TripNavigation tripId={trip.id} active="overview" />
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <SurfaceCard size="panel" className="min-w-0 p-5 sm:p-8">
           <h2 className="type-section mb-6">Your trip at a glance</h2>
@@ -57,8 +64,9 @@ export default async function TripOverviewPage({ params }: TripPageProps) {
         </SurfaceCard>
         <EmptyState icon={Route} title="Your itinerary hasn't been generated yet."
           description="NomviraAI will use your trip preferences, real travel data, and AI planning to build your personalized itinerary."
-          action={<div><Button disabled>Generate itinerary</Button><p className="type-meta mt-3 text-muted-foreground">Coming in the next step</p></div>} />
+          action={<div><Button disabled>Generate itinerary</Button><p className="type-meta mt-3 text-muted-foreground">Available in a future update</p></div>} />
       </div>
+      {stay && <SelectedStaySummary tripId={trip.id} selection={stay} recentName={recentStay?.name} />}
       <DestinationPlaces tripId={trip.id} canDiscover={canDiscover} initialPlaces={places} loadFailed={placesFailed} />
     </>
   );

@@ -51,6 +51,11 @@ export type PlaceRow = {
   last_refreshed_at: string; content_expires_at: string | null;
 };
 type TripCandidateRow = { id: string; trip_id: string; place_id: string; candidate_category: string; source: string; distance_km: number | null; created_at: string };
+export type AccommodationSelectionRow = {
+  id: string; trip_id: string; provider: "stayapi" | "fixture";
+  provider_accommodation_id: string; selected_name: string | null;
+  search_context: Record<string, unknown>; selected_at: string;
+};
 
 export type CreateTripArguments = {
   p_destination_name: string;
@@ -71,6 +76,10 @@ export type CreateTripArguments = {
 export type Database = {
   public: {
     Tables: {
+      trip_accommodation_selections: {
+        Row: AccommodationSelectionRow; Insert: never; Update: never;
+        Relationships: [{ foreignKeyName: "trip_accommodation_selections_trip_id_fkey"; columns: ["trip_id"]; isOneToOne: true; referencedRelation: "trips"; referencedColumns: ["id"] }];
+      };
       trips: {
         Row: TripRow;
         Insert: Omit<TripRow, TripOptionalColumn> & Partial<Pick<TripRow, TripOptionalColumn>>;
@@ -91,6 +100,7 @@ export type Database = {
     };
     Views: { [_ in never]: never };
     Functions: {
+      select_trip_accommodation: { Args: { p_payload: string; p_signature: string; p_expected_id: string | null }; Returns: string };
       create_trip_with_interests: { Args: CreateTripArguments; Returns: string };
       create_resolved_trip: { Args: { p_form: CreateTripArguments; p_payload: string; p_signature: string }; Returns: string };
       persist_trip_place_candidates: { Args: { p_payload: string; p_signature: string }; Returns: number };

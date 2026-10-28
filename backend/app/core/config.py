@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import AnyHttpUrl, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,11 +18,20 @@ class Settings(BaseSettings):
     provider_user_agent: str = Field(default="NomviraAI/0.1", min_length=5, max_length=200)
     default_poi_radius_meters: int = Field(default=10000, ge=100, le=20000)
     max_poi_radius_meters: int = Field(default=20000, ge=100, le=20000)
+    app_env: Literal["development", "test", "production"] = "production"
+    accommodation_provider: Literal["stayapi", "fixture"] = "stayapi"
+    allow_demo_accommodations: bool = False
+    stayapi_api_key: SecretStr = SecretStr("")
+    stayapi_base_url: AnyHttpUrl = AnyHttpUrl("https://api.stayapi.com")
+    accommodation_cache_ttl_seconds: int = Field(default=900, ge=60, le=1800)
+    accommodation_cache_max_entries: int = Field(default=128, ge=1, le=256)
 
     @model_validator(mode="after")
     def valid_radius(self):
         if self.default_poi_radius_meters > self.max_poi_radius_meters:
             raise ValueError("Default POI radius exceeds configured maximum")
+        if self.stayapi_base_url.scheme != "https":
+            raise ValueError("StayAPI requires HTTPS")
         return self
 
 

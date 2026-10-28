@@ -76,7 +76,7 @@ Attribution appears beside search/selection, Review/saved destination and live/p
 | Check | Result |
 | --- | --- |
 | Backend pytest, mocked external HTTP only | **51 passed** |
-| Destination/BFF/PostgreSQL tests | **19 passed**, including nested database checks |
+| Destination/BFF/PostgreSQL tests | **21 passed**, including nested database checks |
 | Existing trip tests | **9 passed** |
 | Existing auth tests | **9 passed** |
 | Backend Ruff lint/format | Passed |
@@ -88,7 +88,7 @@ Attribution appears beside search/selection, Review/saved destination and live/p
 | Live Open-Meteo search | **200**, Tokyo ID `1850147` and timezone `Asia/Tokyo` |
 | Live Overpass | Public endpoint unavailable from this environment: discovery failed safely; direct requests timed out and status endpoint returned 502 |
 
-Total automated Python/Node checks: **88 passing tests**. Python mocks cover normalization, localized/missing fields, ID lookup, bounds, node/way/relation data, metadata filtering, dedupe, distance, provider errors/timeouts, rate limits and concurrent discovery rejection. Search cache tests cover reuse, authentication on cache hits, concurrent requests, cancelled waiters, expiry, eviction, copy isolation and uncached failures. No public Overpass calls run in CI. PGlite tests execute the actual migration chain, pgcrypto, functions, RLS, tamper/expiry/ownership denial, atomic rollback, metadata persistence and legacy-only cleanup. Setup-file tests upgrade all three supported schema stages, save a signed trip and rerun setup while preserving that trip. BFF tests replace framework/session/transport edges while executing real production validation/signing/handler/action code.
+Total automated Python/Node checks: **90 passing tests**. Python mocks cover normalization, localized/missing fields, ID lookup, bounds, node/way/relation data, metadata filtering, dedupe, distance, provider errors/timeouts, rate limits and concurrent discovery rejection. Search cache tests cover reuse, authentication on cache hits, concurrent requests, cancelled waiters, expiry, eviction, copy isolation and uncached failures. No public Overpass calls run in CI. PGlite tests execute the actual migration chain, pgcrypto, functions, RLS, tamper/expiry/ownership denial, atomic rollback, metadata persistence and legacy-only cleanup. Setup-file tests upgrade all three supported schema stages, save a signed trip and rerun setup while preserving that trip. BFF tests replace framework/session/transport edges while executing real production validation/signing/handler/action code. Discovery error tests distinguish overload, unavailability and persistence failures without exposing raw details.
 
 ### Trip-save and search-latency follow-up
 
@@ -101,6 +101,14 @@ Search now avoids duplicate Proxy/BFF identity lookups, refreshes cookies within
 Live backend timing in `.qa/search-latency-results.json`: one upstream failure at 3,145 ms, successful uncached search at 4,122 ms, and repeated cached search at 19.7 ms. This measures the local FastAPI search endpoint, excluding browser debounce and Supabase authentication. First-time searches still depend on upstream availability; this does not establish consistently fast cold searches or a successful live authenticated trip save.
 
 Browser evidence uses existing ignored `.qa` tooling: `verify-step6-browser.cjs`, `step6-browser-results.json` and screenshots under `.qa/screenshots/step-6-open`. Live smoke evidence is `.qa/step6-open-live-results.json`. Browser fixtures are not a live authenticated Supabase end-to-end test. Live Open-Meteo was verified; successful live Overpass discovery was **not verified** because of the external endpoint/network failures. No retry loop or paid fallback was introduced.
+
+### Place-discovery follow-up
+
+Live diagnostics exposed two application bugs as well as an upstream outage. The generated type-filter statements were missing semicolons before their `out` statements; a live Overpass parser rejected each with `';' expected - 'out' found`. The corrected filters end before their output statements. A subsequent live response reported insufficient query memory with the original 8MiB allowance, requiring at least 32MiB. The query now requests a bounded 64MiB. Radius, response-count limits, metadata filtering, timeouts, concurrency/cooldown guards and persisted-result reuse remain enforced. Regression checks cover the corrected query structure and memory budget.
+
+The BFF now distinguishes HTTP 429 from general provider failures, and the browser uses a fixed allowlist of recovery messages for outages, rate limits, expired sessions, unavailable trip details and failed persistence. It never renders raw provider/database messages. Browser checks cover these states, retry availability and accessibility in addition to the existing flow; no page errors or console warnings occurred.
+
+The user identified **Mussoorie, Uttarakhand, India** as the failing destination. Live Open-Meteo search returned canonical ID `1262374`, coordinates `30.45498,78.07068` and timezone `Asia/Kolkata`. The configured Overpass instance timed out, and a separate tiny diagnostic returned HTTP 502 explicitly reporting full query workers/queue. Documented Private.coffee and VK Maps instances were checked manually; corrected live Mussoorie queries still timed out. No alternate endpoint was configured without a successful live result. Evidence is in ignored `.qa/mussoorie-*.json` and the local diagnostic response files. Successful live discovery for Mussoorie remains unverified because of external service availability; no fake places, automatic endpoint rotation or retry loop was introduced. No database migration is needed for these query/UI fixes.
 
 ## Security and remaining setup
 

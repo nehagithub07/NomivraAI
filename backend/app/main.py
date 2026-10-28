@@ -10,6 +10,7 @@ from app.core.errors import register_error_handlers
 from app.core.logging import RequestLoggingMiddleware, configure_logging
 from app.core.rate_limit import ProviderLimits
 from app.core.search_cache import DestinationSearchCache
+from app.services.hotel_recommendation_service import HotelRecommendationService
 
 
 def create_app(
@@ -28,6 +29,7 @@ def create_app(
             follow_redirects=False,
         ) as client:
             app.state.http = client
+            app.state.accommodations = HotelRecommendationService(app.state.settings, client)
             yield
 
     app = FastAPI(title="Nomvira API", version="0.1.0", lifespan=lifespan)
