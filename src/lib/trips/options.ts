@@ -34,7 +34,7 @@ export function optionLabel(value: string) {
 }
 
 export const wizardSteps = [
-  { label: "Destination", heading: "Where are you going?", description: "Tell us the destination you want NomviraAI to plan around.", fields: ["destination"] },
+  { label: "Destination", heading: "Where are you going?", description: "Choose a destination for your next adventure.", fields: ["destination", "resolvedDestination", "destinationProof"] },
   { label: "Dates", heading: "When are you travelling?", description: "Choose the first and last day of your journey.", fields: ["startDate", "endDate"] },
   { label: "Travelers", heading: "Who's travelling?", description: "A solo adventure or a shared journey?", fields: ["travelers"] },
   { label: "Budget", heading: "What's your trip budget?", description: "Set a total budget for everyone travelling. You can choose your currency.", fields: ["budget", "currency", "budgetStyle"] },

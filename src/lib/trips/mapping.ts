@@ -3,7 +3,7 @@ import { normalizeBudget, type TripFormValues } from "./validation.ts";
 
 export function mapTripFormToDatabase(values: TripFormValues, timeZone: string): CreateTripArguments {
   return {
-    p_destination_name: values.destination,
+    p_destination_name: values.resolvedDestination?.name || values.destination,
     p_start_date: values.startDate,
     p_end_date: values.endDate,
     p_travelers_count: values.travelers,

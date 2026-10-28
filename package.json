@@ -9,8 +9,10 @@
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "next typegen && tsc --noEmit",
+    "db:prepare": "node scripts/prepare-trip-database.mjs",
     "test:auth": "node --experimental-strip-types --test tests/auth.test.mjs",
-    "test:trips": "node --experimental-strip-types --test tests/trips.test.mjs"
+    "test:trips": "node --experimental-strip-types --test tests/trips.test.mjs",
+    "test:destinations": "node --experimental-strip-types --test tests/destinations.test.mjs tests/destinations-db.test.mjs tests/destinations-bff.test.mjs tests/trip-database-setup.test.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "6.0.2",
@@ -32,6 +34,7 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.12",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "26.6.5",
     "@types/react": "19.3.0",

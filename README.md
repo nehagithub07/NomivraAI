@@ -1,6 +1,6 @@
-# NomviraAI client — Steps 1–5
+# NomviraAI client — Steps 1–6
 
-A light design system, responsive application shell, Home dashboard, Supabase authentication, and a Create Trip Wizard with user-owned PostgreSQL data. Follow [AUTH_SETUP.md](AUTH_SETUP.md) for authentication and [TRIPS_SETUP.md](TRIPS_SETUP.md) to apply the reproducible trip migration. Itinerary generation and travel APIs are future work.
+A light design system, responsive application shell, Home dashboard, Supabase authentication, and a Create Trip Wizard with user-owned PostgreSQL data. Step 6 uses Open-Meteo Geocoding for destinations and OpenStreetMap Overpass for attractions through Python/FastAPI. No Google Maps key or billing is required. Public no-key access is for current non-commercial development, subject to provider terms and fair use. Follow [AUTH_SETUP.md](AUTH_SETUP.md), [TRIPS_SETUP.md](TRIPS_SETUP.md), and [backend/README.md](backend/README.md) for setup. Itinerary generation remains future work.
 
 ## Run locally
 
@@ -19,6 +19,7 @@ npm run typecheck
 npm run build
 npm run test:auth
 npm run test:trips
+npm run test:destinations
 ```
 
 ## Foundation
@@ -53,7 +54,7 @@ Design-system controls keep state only in memory and reset on refresh. Their for
 - `/` renders the mostly server-rendered dashboard from `src/components/nomvira/dashboard`. It reuses the existing shell, surfaces, section headings, buttons, inputs, badges, typography, and empty-state component. No theme tokens, shell behavior, or existing module placeholders were changed for Step 3.
 - The upcoming card uses the nearest real planning/active trip with `start_date >= today` (UTC day for this server-rendered query), ordered by start date. No result uses the existing no-trip state; database failures show an error. No weather, activity counts, or budget spending is fabricated.
 - `src/lib/mock/dashboard.ts` retains destination recommendations, recent-trip examples, and insight, clearly labeled as sample content. Recent sample cards do not link to fabricated trip IDs. The greeting uses verified user identity. `travel-format.ts` formats date-only values in UTC and preserves decimal budget amounts.
-- Home's destination starter navigates to `/trips/new?destination=...`, prefilling the wizard without autocomplete or an external API. The overview fetches real UUID trips through the authenticated session and RLS; missing or inaccessible trips return not-found.
+- Home's destination starter navigates to `/trips/new?destination=...`, prefilling search text. The user still selects and resolves a real destination. The overview fetches real UUID trips through the authenticated session and RLS; missing or inaccessible trips return not-found.
 - Recommendations use a horizontal snap row on mobile, two columns at tablet widths, and four at 1280px and above. Existing shell padding protects content from the mobile bottom navigation.
 - Five original local SVG illustrations live in `public/destinations`. No photos were downloaded or hotlinked. Next.js `Image` reserves their layout space. These small local recommendation assets load eagerly so the empty-dashboard view can show them immediately; reassess loading priority when replacing them with larger photos.
 - The upcoming card displays the saved total budget and styles. Recommendations, insights, and recent examples retain their sample labels.
@@ -64,14 +65,16 @@ Design-system controls keep state only in memory and reset on refresh. Their for
 
 The seven steps are **Destination → Dates → Travelers → Budget → Interests → Preferences → Review**. A single React Hook Form instance retains values on Back and Review Edit. Continue validates the current step; the shared Zod schema validates the full submission again on the server.
 
-- Destination is text (2–160 characters). Native date inputs reuse the existing Input because no Calendar/date library existed. Dates stay `YYYY-MM-DD`; duration includes both endpoints. Past starts use the browser's IANA time zone, checked on the server and RPC too.
+- Destination uses authenticated Open-Meteo search (3–100 query characters), canonical provider metadata and a signed proof. Selection is immediate; no billing session token or redundant Details call is used. Native date inputs reuse the existing Input because no Calendar/date library existed. Dates stay `YYYY-MM-DD`; duration includes both endpoints. Past starts use the browser's IANA time zone, checked on the server and RPC too.
 - Travelers range from 1–20. Currency definitions are centralized. Budgets stay decimal text until PostgreSQL `numeric(12,2)`, with at most two decimals and a limit of 100,000,000. No exchange-rate or allocation logic is added.
 - Interests require 1–8 selections. Balanced style/pace, 1 traveler, and Hotel are defaults. An empty dietary array means No preference. Optional special requests are limited to 500 characters.
 - Accessible option inputs, step announcements, field errors, loading states, and duplicate-click protection are included. Database/network errors preserve values. An expired session offers sign-in in another tab. Drafts remain in memory; refresh/leaving clears them.
-- The authenticated Server Action explicitly maps input and calls the invoker RPC `create_trip_with_interests`. PostgreSQL derives ownership from `auth.uid()` and atomically inserts the trip and interests. Both tables have RLS, restricted grants, constraints, and indexes.
+- The authenticated Server Action explicitly maps user input and sends signed provider data to `create_resolved_trip`, which validates identity/proof and reuses Step 5's atomic trip/interests creation. Canonical name, provider ID, display name, country/admin fields, coordinates, timezone and feature/population data are persisted. Both trip tables retain RLS, restricted grants, constraints, and indexes.
 - My Trips and the UUID overview use real user-owned rows. The overview displays the saved requirements and a disabled itinerary action. Edit/delete UI and AI generation are future work.
 
 See [TRIPS_SETUP.md](TRIPS_SETUP.md) for migration deployment, existing legacy-table preservation, all columns/policies/indexes, and manual type alignment. See [STEP5_REPORT.md](STEP5_REPORT.md) for the file list and verification results.
+
+If destination search works but creating a trip fails after the Step 6 upgrade, run `npm run db:prepare`. Run the generated private `.qa/setup-trip-database.sql` in your Supabase SQL Editor to install missing Step 6 migrations and configure the matching database secret atomically. The command prepares the file without changing the hosted database; see [backend/README.md](backend/README.md#database-migration-and-deployment). Recent destination searches are cached in memory to avoid repeated provider and authentication requests.
 
 ## Authentication
 
@@ -83,4 +86,4 @@ See [TRIPS_SETUP.md](TRIPS_SETUP.md) for migration deployment, existing legacy-t
 - Authenticated names replace the dashboard fixture identity. Header identity uses a Google avatar when available, then initials or a generic icon. Upcoming-trip information uses saved user data.
 - Run `npm run test:auth` for nine tests covering redirects, validation, masking, privacy-safe recovery responses, and identity fallbacks. Browser tooling remains isolated in ignored `.qa`. Live email/OAuth/session round trips must be verified after configuring the external project; helper/UI checks alone do not establish that the providers work.
 
-Step 5 ends with saved trip requirements and Trip Overview. No profile database, onboarding, or additional authentication providers were added.
+Step 6 adds `GeocodingProvider`/`PlacesProvider` interfaces with Open-Meteo/Overpass adapters, authenticated BFF routes, accessible search, and deliberate attraction discovery. Trip Overview reuses persisted cards without provider calls on render. [backend/README.md](backend/README.md) documents the internal key, forward migration, provider terms/attribution, limits and both development servers. [STEP6_REPORT.md](STEP6_REPORT.md) records implementation and verification. No profile database, onboarding, or additional authentication providers were added.

@@ -7,10 +7,10 @@ import { createClient } from "@/lib/supabase/server";
 import { getSupabaseConfig } from "@/lib/supabase/config";
 import { safeNextPath } from "./redirect";
 
-export const getCurrentUser = cache(async () => {
+export const getCurrentUser = cache(async (writable = false) => {
   if (!getSupabaseConfig()) return null;
   try {
-    const supabase = await createClient();
+    const supabase = await createClient({ writable });
     const { data, error } = await supabase.auth.getUser();
     return error ? null : data.user;
   } catch {

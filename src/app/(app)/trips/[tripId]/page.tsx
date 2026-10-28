@@ -8,10 +8,15 @@ import { EmptyState } from "@/components/nomvira/empty-state";
 import { PageHeader } from "@/components/nomvira/layout/page-header";
 import { SurfaceCard } from "@/components/nomvira/surface-card";
 import { TripSummary } from "@/components/nomvira/trips/trip-summary";
-import { getTrip } from "@/lib/trips/queries";
+import { getTrip, hasCurrentDestination } from "@/lib/trips/queries";
 import { durationLabel, tripDuration, travelersLabel } from "@/lib/trips/dates";
 import { optionLabel } from "@/lib/trips/options";
 import { formatTripDates } from "@/lib/travel-format";
+import { createClient } from "@/lib/supabase/server";
+import { DestinationPlaces } from "@/components/nomvira/trips/destination-places";
+import { getPersistedPlaces } from "@/lib/destinations/persistence";
+import type { NormalizedPlace } from "@/lib/destinations/validation";
+import { ProviderAttribution } from "@/components/nomvira/trips/provider-attribution";
 
 type TripPageProps = { params: Promise<{ tripId: string }> };
 
@@ -25,6 +30,10 @@ export async function generateMetadata({
 export default async function TripOverviewPage({ params }: TripPageProps) {
   const trip = await getTrip((await params).tripId);
   if (!trip) notFound();
+  const db = await createClient();
+  let places: NormalizedPlace[] = [], placesFailed = false;
+  try { places = await getPersistedPlaces(db, trip.id); } catch { placesFailed = true; }
+  const canDiscover = hasCurrentDestination(trip);
   return (
     <>
       <Link href="/trips" className="type-small mb-5 inline-flex min-h-11 items-center gap-2 font-medium"><ArrowLeft className="size-4" aria-hidden="true" />Back to My Trips</Link>
@@ -35,17 +44,22 @@ export default async function TripOverviewPage({ params }: TripPageProps) {
         <SurfaceCard size="panel" className="min-w-0 p-5 sm:p-8">
           <h2 className="type-section mb-6">Your trip at a glance</h2>
           <TripSummary values={{
-            destination: trip.destination_name, startDate: trip.start_date, endDate: trip.end_date,
+            resolvedDestination: null, destinationProof: null,
+            destination: trip.destination_provider === "open_meteo" ? trip.destination_display_name || trip.destination_name : trip.destination_name,
+            startDate: trip.start_date, endDate: trip.end_date,
             travelers: trip.travelers_count, budget: String(trip.budget_total), currency: trip.currency,
             budgetStyle: trip.budget_style, interests: trip.trip_interests.map(({ interest }) => interest),
             travelPace: trip.travel_pace, accommodationPreferences: trip.accommodation_preferences,
             dietaryPreferences: trip.dietary_preferences, specialRequests: trip.special_requests || "",
           }} />
+          <p className="type-small mt-5 text-muted-foreground">{canDiscover ? trip.destination_timezone || "Timezone not available." : "Destination details not yet enriched."}</p>
+          {trip.destination_provider === "open_meteo" && <ProviderAttribution provider="open_meteo" />}
         </SurfaceCard>
         <EmptyState icon={Route} title="Your itinerary hasn't been generated yet."
           description="NomviraAI will use your trip preferences, real travel data, and AI planning to build your personalized itinerary."
           action={<div><Button disabled>Generate itinerary</Button><p className="type-meta mt-3 text-muted-foreground">Coming in the next step</p></div>} />
       </div>
+      <DestinationPlaces tripId={trip.id} canDiscover={canDiscover} initialPlaces={places} loadFailed={placesFailed} />
     </>
   );
 }

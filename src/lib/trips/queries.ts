@@ -9,6 +9,10 @@ import type { TripInterest } from "./options";
 
 export type TripWithInterests = TripRow & { trip_interests: { interest: TripInterest }[] };
 
+export function hasCurrentDestination(trip: TripRow) {
+  return trip.destination_provider === "open_meteo" && !!trip.destination_provider_id && trip.destination_latitude !== null && trip.destination_longitude !== null;
+}
+
 export const getTrips = cache(async (): Promise<TripRow[]> => {
   const user = await requireUser();
   const supabase = await createClient();

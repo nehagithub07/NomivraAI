@@ -4,10 +4,25 @@ import { createTripFormSchema, defaultTripValues, moneyMinorUnits, normalizeBudg
 import { durationLabel, isDateOnly, todayInTimeZone, travelersLabel, tripDuration } from "../src/lib/trips/dates.ts";
 import { mapTripFormToDatabase } from "../src/lib/trips/mapping.ts";
 import { formatTripBudget } from "../src/lib/travel-format.ts";
+import { destination } from "./destination-fixtures.mjs";
+import { tripSaveFailure } from "../src/lib/trips/save-errors.ts";
 
 const today = "2026-10-28";
 const schema = createTripFormSchema(today);
-const valid = { ...defaultTripValues, destination: "  Tokyo, Japan  ", startDate: "2027-04-12", endDate: "2027-04-18", budget: "2500.50", interests: ["food", "culture"] };
+const valid = { ...defaultTripValues, destination: "  Tokyo, Japan  ", startDate: "2027-04-12", endDate: "2027-04-18", budget: "2500.50", interests: ["food", "culture"],
+  resolvedDestination: destination,
+  destinationProof: { payload: "test-only-proof", signature: "0".repeat(64) },
+};
+
+test("missing trip schema reports incomplete setup without exposing database details", () => {
+  for (const code of ["PGRST202", "PGRST204", "PGRST205", "42703", "42883"]) {
+    const result = tripSaveFailure({ code, message: "PRIVATE DATABASE DETAILS", details: "PRIVATE SECRET" });
+    assert.equal(result.status, "error");
+    assert.ok(result.message.includes("setup update"));
+    assert.equal(result.message.includes("PRIVATE"), false);
+  }
+  assert.equal(tripSaveFailure({ code: "42501", message: "PRIVATE" }).message.includes("PRIVATE"), false);
+});
 
 test("valid trip trims text and defaults to one traveler with balanced preferences", () => {
   const data = schema.parse(valid);
@@ -66,7 +81,7 @@ test("invalid amounts, excess precision, non-finite values, and unsupported curr
 });
 
 test("destination, travelers, interest limits, preferences, and special requests are validated", () => {
-  for (const destination of ["  ", "a", "x".repeat(161), "Tokyo\nJapan"]) assert.equal(schema.safeParse({ ...valid, destination }).success, false);
+  for (const destination of ["  ", "a", "x".repeat(1001), "Tokyo\nJapan"]) assert.equal(schema.safeParse({ ...valid, destination }).success, false);
   for (const travelers of [0, 21, 1.5, Number.NaN, "2"]) assert.equal(schema.safeParse({ ...valid, travelers }).success, false);
   for (const interests of [[], ["unknown"], ["food", "food"], ["food", "history", "culture", "nature", "adventure", "art", "shopping", "nightlife", "beaches"]]) assert.equal(schema.safeParse({ ...valid, interests }).success, false);
   assert.equal(schema.safeParse({ ...valid, accommodationPreferences: [] }).success, false);
@@ -78,7 +93,7 @@ test("destination, travelers, interest limits, preferences, and special requests
 test("explicit mapping excludes attacker-controlled ownership, status, and location fields", () => {
   const parsed = schema.parse({ ...valid, owner_id: "attacker", status: "active", destination_latitude: 42 });
   const mapped = mapTripFormToDatabase(parsed, "Asia/Calcutta");
-  assert.equal(mapped.p_destination_name, "Tokyo, Japan");
+  assert.equal(mapped.p_destination_name, "Tokyo");
   assert.equal(mapped.p_budget_total, "2500.50");
   assert.equal(mapped.p_time_zone, "Asia/Calcutta");
   assert.equal(mapped.p_special_requests, null);

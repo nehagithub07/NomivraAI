@@ -8,10 +8,22 @@ export type TripRow = {
   id: string;
   owner_id: string;
   destination_name: string;
-  destination_place_id: string | null;
+  destination_provider: string | null;
+  destination_provider_id: string | null;
+  destination_display_name: string | null;
+  destination_country: string | null;
+  destination_country_code: string | null;
+  destination_admin1: string | null;
+  destination_admin2: string | null;
+  destination_feature_code: string | null;
+  destination_population: number | null;
   destination_latitude: number | null;
   destination_longitude: number | null;
   destination_timezone: string | null;
+  destination_types: string[];
+  destination_utc_offset_minutes: number | null;
+  destination_enriched_at: string | null;
+  destination_content_expires_at: string | null;
   start_date: string;
   end_date: string;
   travelers_count: number;
@@ -27,6 +39,18 @@ export type TripRow = {
   updated_at: string;
 };
 type TripInterestRow = { id: string; trip_id: string; interest: TripInterest; created_at: string };
+type TripOptionalColumn = "id" | "created_at" | "updated_at" | "destination_provider" | "destination_provider_id" |
+  "destination_latitude" | "destination_longitude" | "destination_timezone" |
+  "destination_display_name" | "destination_types" | "destination_utc_offset_minutes" |
+  "destination_enriched_at" | "destination_content_expires_at" | "destination_country" | "destination_country_code" |
+  "destination_admin1" | "destination_admin2" | "destination_feature_code" | "destination_population";
+export type PlaceRow = {
+  id: string; provider: string; provider_place_id: string; name: string | null;
+  formatted_address: string | null; latitude: number | null; longitude: number | null;
+  category: string | null; metadata: { [key: string]: string } | null; types: string[]; created_at: string; updated_at: string;
+  last_refreshed_at: string; content_expires_at: string | null;
+};
+type TripCandidateRow = { id: string; trip_id: string; place_id: string; candidate_category: string; source: string; distance_km: number | null; created_at: string };
 
 export type CreateTripArguments = {
   p_destination_name: string;
@@ -49,7 +73,7 @@ export type Database = {
     Tables: {
       trips: {
         Row: TripRow;
-        Insert: Omit<TripRow, "id" | "created_at" | "updated_at" | "destination_place_id" | "destination_latitude" | "destination_longitude" | "destination_timezone"> & Partial<Pick<TripRow, "id" | "created_at" | "updated_at" | "destination_place_id" | "destination_latitude" | "destination_longitude" | "destination_timezone">>;
+        Insert: Omit<TripRow, TripOptionalColumn> & Partial<Pick<TripRow, TripOptionalColumn>>;
         Update: Partial<TripRow>;
         Relationships: [];
       };
@@ -59,9 +83,18 @@ export type Database = {
         Update: Partial<TripInterestRow>;
         Relationships: [{ foreignKeyName: "trip_interests_trip_id_fkey"; columns: ["trip_id"]; isOneToOne: false; referencedRelation: "trips"; referencedColumns: ["id"] }];
       };
+      places: { Row: PlaceRow; Insert: never; Update: never; Relationships: [] };
+      trip_place_candidates: {
+        Row: TripCandidateRow; Insert: never; Update: never;
+        Relationships: [{ foreignKeyName: "trip_place_candidates_place_id_fkey"; columns: ["place_id"]; isOneToOne: false; referencedRelation: "places"; referencedColumns: ["id"] }];
+      };
     };
     Views: { [_ in never]: never };
-    Functions: { create_trip_with_interests: { Args: CreateTripArguments; Returns: string } };
+    Functions: {
+      create_trip_with_interests: { Args: CreateTripArguments; Returns: string };
+      create_resolved_trip: { Args: { p_form: CreateTripArguments; p_payload: string; p_signature: string }; Returns: string };
+      persist_trip_place_candidates: { Args: { p_payload: string; p_signature: string }; Returns: number };
+    };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
   };

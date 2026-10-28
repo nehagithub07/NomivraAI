@@ -4,6 +4,7 @@ import {
   travelPaces, tripInterests,
 } from "./options.ts";
 import { isDateOnly, isTimeZone } from "./dates.ts";
+import { resolvedDestinationSchema } from "../destinations/validation.ts";
 
 export const maximumBudget = 100_000_000;
 
@@ -28,8 +29,10 @@ const budget = z.string().trim()
   }, "Budget must be greater than 0 and no more than 100,000,000.");
 
 export const tripFormSchema = z.object({
+  resolvedDestination: resolvedDestinationSchema.nullable(),
+  destinationProof: z.object({ payload: z.string().max(20000), signature: z.string().regex(/^[a-f0-9]{64}$/) }).nullable(),
   destination: z.string().trim().min(2, "Enter a destination with at least 2 characters.")
-    .max(160, "Use 160 characters or fewer.")
+    .max(1000, "Use 1000 characters or fewer.")
     .refine((value) => !/[\u0000-\u001f\u007f]/.test(value), "Enter a destination on one line."),
   startDate: dateOnly,
   endDate: dateOnly,
@@ -46,6 +49,9 @@ export const tripFormSchema = z.object({
   dietaryPreferences: z.array(z.enum(dietaryPreferences)).max(dietaryPreferences.length).refine(unique),
   specialRequests: z.string().trim().max(500, "Use 500 characters or fewer.")
     .refine((value) => !value.includes("\u0000"), "Remove unsupported characters."),
+}).refine((values) => !!values.resolvedDestination && !!values.destinationProof, {
+  path: ["destination"], message: "Select a destination from the search results before continuing.",
+  when: (payload) => z.object({ resolvedDestination: resolvedDestinationSchema.nullable(), destinationProof: z.unknown() }).safeParse(payload.value).success,
 }).refine((values) => !isDateOnly(values.startDate) || !isDateOnly(values.endDate) || values.endDate >= values.startDate, {
   path: ["endDate"], message: "The end date must be on or after the start date.",
   when: (payload) => z.object({ startDate: dateOnly, endDate: dateOnly }).safeParse(payload.value).success,
@@ -69,6 +75,7 @@ export type CreateTripResult =
   | { status: "error"; message: string; fieldErrors?: Partial<Record<TripField, string[]>>; sessionExpired?: boolean };
 
 export const defaultTripValues: TripFormValues = {
+  resolvedDestination: null, destinationProof: null,
   destination: "", startDate: "", endDate: "", travelers: 1, budget: "",
   currency: "USD", budgetStyle: "balanced", interests: [], travelPace: "balanced",
   accommodationPreferences: ["hotel"], dietaryPreferences: [], specialRequests: "",

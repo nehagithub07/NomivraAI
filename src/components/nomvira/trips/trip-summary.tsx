@@ -5,10 +5,12 @@ import type { TripFormValues } from "@/lib/trips/validation";
 import { durationLabel, tripDuration, travelersLabel } from "@/lib/trips/dates";
 import { optionLabel } from "@/lib/trips/options";
 import { formatTripDates, formatTripBudget } from "@/lib/travel-format";
+import { ProviderAttribution } from "./provider-attribution";
 
 export function TripSummary({ values, onEdit }: { values: TripFormValues; onEdit?: (step: number) => void }) {
   const sections: { label: string; step: number; content: ReactNode }[] = [
-    { label: "Destination", step: 0, content: values.destination },
+    { label: "Destination", step: 0, content: <>{values.resolvedDestination?.display_name || values.destination}
+      {values.resolvedDestination && <><span className="type-small mt-1 block text-muted-foreground">{values.resolvedDestination.country}<br />{values.resolvedDestination.timezone || "Timezone not available"}</span><ProviderAttribution provider="open_meteo" /></>}</> },
     { label: "Dates", step: 1, content: <>{formatTripDates(values.startDate, values.endDate)}<span className="type-small mt-1 block text-muted-foreground">{durationLabel(tripDuration(values.startDate, values.endDate))}</span></> },
     { label: "Travelers", step: 2, content: travelersLabel(values.travelers) },
     { label: "Budget", step: 3, content: <>{formatTripBudget(values.budget, values.currency)}<span className="type-small mt-1 block text-muted-foreground">{optionLabel(values.budgetStyle)} budget</span></> },
