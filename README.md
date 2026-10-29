@@ -1,6 +1,6 @@
-# NomviraAI client — Steps 1–9
+# NomivraAI client  
 
-A light design system, responsive application shell, Home dashboard, Supabase authentication, and a Create Trip Wizard with user-owned PostgreSQL data. Destination discovery, hotel/food recommendations and Step 9 AI itinerary planning use the existing Next.js BFF, Python/FastAPI providers and signed Supabase persistence. Public destination providers remain subject to their terms and fair use; Gemini planning requires a private API key. Follow [AUTH_SETUP.md](AUTH_SETUP.md), [TRIPS_SETUP.md](TRIPS_SETUP.md), [backend/README.md](backend/README.md), and [STEP9_REPORT.md](STEP9_REPORT.md) for setup.
+A light design system, responsive application shell, Home dashboard, Supabase authentication, and a Create Trip Wizard with user-owned PostgreSQL data. Destination discovery, hotel/food recommendations, Step 9 AI itinerary planning, and Step 10 deterministic budget tracking use the existing Next.js BFF, Python/FastAPI services and signed Supabase persistence. Public destination providers remain subject to their terms and fair use; Gemini planning requires a private API key. Follow [AUTH_SETUP.md](AUTH_SETUP.md), [TRIPS_SETUP.md](TRIPS_SETUP.md), [backend/README.md](backend/README.md), [STEP9_REPORT.md](STEP9_REPORT.md), and [STEP10_REPORT.md](STEP10_REPORT.md) for setup.
 
 ## Run locally
 
@@ -26,6 +26,7 @@ npm run test:destinations
 npm run test:accommodations
 npm run test:food
 npm run test:itineraries
+npm run test:budget
 ```
 
 ## Foundation
@@ -72,15 +73,15 @@ Design-system controls keep state only in memory and reset on refresh. Their for
 The seven steps are **Destination → Dates → Travelers → Budget → Interests → Preferences → Review**. A single React Hook Form instance retains values on Back and Review Edit. Continue validates the current step; the shared Zod schema validates the full submission again on the server.
 
 - Destination uses authenticated Open-Meteo search (3–100 query characters), canonical provider metadata and a signed proof. Selection is immediate; no billing session token or redundant Details call is used. Native date inputs reuse the existing Input because no Calendar/date library existed. Dates stay `YYYY-MM-DD`; duration includes both endpoints. Past starts use the browser's IANA time zone, checked on the server and RPC too.
-- Travelers range from 1–20. Currency definitions are centralized. Budgets stay decimal text until PostgreSQL `numeric(12,2)`, with at most two decimals and a limit of 100,000,000. No exchange-rate or allocation logic is added.
+- Travelers range from 1–20. Currency definitions are centralized. Budgets stay decimal text until PostgreSQL `numeric(12,2)`, with at most two decimals and a limit of 100,000,000. The trip wizard does not perform exchange-rate conversion; Step 10 derives deterministic category allocations from the saved trip budget.
 - Interests require 1–8 selections. Balanced style/pace, 1 traveler, and Hotel are defaults. An empty dietary array means No preference. Optional special requests are limited to 500 characters.
 - Accessible option inputs, step announcements, field errors, loading states, and duplicate-click protection are included. Database/network errors preserve values. An expired session offers sign-in in another tab. Drafts remain in memory; refresh/leaving clears them.
 - The authenticated Server Action explicitly maps user input and sends signed provider data to `create_resolved_trip`, which validates identity/proof and reuses Step 5's atomic trip/interests creation. Canonical name, provider ID, display name, country/admin fields, coordinates, timezone and feature/population data are persisted. Both trip tables retain RLS, restricted grants, constraints, and indexes.
-- My Trips and the UUID overview use real user-owned rows. The overview displays the saved requirements and links to the versioned AI itinerary planner. Trip edit/delete UI remains future work.
+- My Trips and the UUID overview use real user-owned rows. The overview displays the saved requirements and links to Hotels, Food, Itinerary, and Budget. Trip edit/delete UI remains future work.
 
 See [TRIPS_SETUP.md](TRIPS_SETUP.md) for migration deployment, existing legacy-table preservation, all columns/policies/indexes, and manual type alignment. See [STEP5_REPORT.md](STEP5_REPORT.md) for the file list and verification results.
 
-If creating a trip, saving a stay or saving a food spot needs a database setup update, run `npm run db:prepare`. Run the generated private `.qa/setup-trip-database.sql` in your Supabase SQL Editor to install missing Step 6/7/8 migrations and configure the matching database secret atomically. The command prepares the file without changing the hosted database; see [backend/README.md](backend/README.md#database-migration-and-deployment). Existing trips are retained. Recent destination searches are cached in memory to avoid repeated provider and authentication requests.
+If creating a trip, saving a stay, saving a food spot, generating an itinerary, or storing budget entries needs a database setup update, run `npm run db:prepare`. Run the generated private `.qa/setup-trip-database.sql` in your Supabase SQL Editor to install missing Step 6/7/8/9/10 migrations and configure the matching database secret atomically. The command prepares the file without changing the hosted database; see [backend/README.md](backend/README.md#database-migration-and-deployment). Existing trips are retained. Recent destination searches are cached in memory to avoid repeated provider and authentication requests.
 
 ## Authentication
 
@@ -120,3 +121,28 @@ in FastAPI's private environment. Apply `20261029000600_itinerary_versions.sql`
 discovered attractions, and never guesses venues, prices or travel times. See
 [STEP9_REPORT.md](STEP9_REPORT.md) for setup, validation, bounded repair behavior,
 development fixtures and manual verification.
+
+## Smart budget engine
+
+Open a saved trip and choose **Budget**. Step 10 uses the trip's saved total budget,
+currency, dates, traveler count and budget style to build a deterministic category
+allocation across accommodation, food, activities, transport and miscellaneous
+spending. Money calculations use application logic rather than the LLM, and monetary
+values are handled with decimal-safe arithmetic.
+
+- Budget styles map to centralized allocation percentages that always total 100%.
+- Known selected-hotel prices can contribute to accommodation spend when a genuine
+  provider amount exists. Food and attraction costs remain unknown unless a trusted
+  provider or the user supplies an amount; NomivraAI does not fabricate prices.
+- Users can add planned or actual expenses, categorized as accommodation, food,
+  activities, transport or miscellaneous. Planned and actual spending remain distinct.
+- The summary exposes total budget, category allocations, known/planned/actual costs,
+  remaining budget, per-person budget, flexible daily budget and deterministic budget
+  health such as **Healthy**, **Watch**, or **Over budget**.
+- Automatic provider-backed costs and manual entries are kept separate so the same
+  expense is not silently counted twice.
+- Budget data is trip-owned and protected by the same authenticated BFF, Supabase RLS,
+  validation and persistence boundaries used elsewhere in the application.
+- The itinerary engine may consume validated budget context, but Gemini is never used
+  for arithmetic, currency conversion or fabricated expense estimates.
+
