@@ -30,7 +30,7 @@ test("deployment rejects localhost, insecure URLs, credentials and callback path
 });
 
 test("deployment rejects exposed provider keys and service-role keys without printing their values", () => {
-  for (const name of ["NEXT_PUBLIC_NOMVIRA_INTERNAL_API_KEY", "NEXT_PUBLIC_STAYAPI_API_KEY", "NEXT_PUBLIC_GEOAPIFY_API_KEY", "NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY", "NEXT_PUBLIC_SUPABASE_SECRET_KEY"]) {
+  for (const name of ["NEXT_PUBLIC_NOMVIRA_INTERNAL_API_KEY", "NEXT_PUBLIC_STAYAPI_API_KEY", "NEXT_PUBLIC_GEOAPIFY_API_KEY", "NEXT_PUBLIC_GEMINI_API_KEY", "NEXT_PUBLIC_GOOGLE_API_KEY", "NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY", "NEXT_PUBLIC_SUPABASE_SECRET_KEY"]) {
     const errors = deploymentErrors({ ...configured, [name]: "PRIVATE_DO_NOT_LOG" });
     assert.ok(errors.some(error => error.includes(name)));
     assert.ok(!errors.join(" ").includes("PRIVATE_DO_NOT_LOG"));

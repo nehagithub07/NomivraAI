@@ -32,3 +32,9 @@ services:
         value: geoapify
       - key: GEOAPIFY_API_KEY
         sync: false
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: GEMINI_MODEL
+        value: gemini-3.8-flash
+      - key: GEMINI_API_KEY
+        sync: false

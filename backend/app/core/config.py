@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     default_food_radius_meters: int = Field(default=5000, ge=100, le=15000)
     food_cache_ttl_seconds: int = Field(default=900, ge=60, le=1800)
     food_cache_max_entries: int = Field(default=128, ge=1, le=256)
+    llm_provider: Literal["gemini", "fixture"] = "gemini"
+    gemini_api_key: SecretStr = SecretStr("")
+    gemini_model: str = Field(default="gemini-3.8-flash", pattern=r"^[a-zA-Z0-9._-]{1,100}$")
 
     @model_validator(mode="after")
     def valid_radius(self):

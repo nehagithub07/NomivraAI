@@ -8,10 +8,10 @@ import { signProof } from "../src/lib/destinations/proof.ts";
 import { destination } from "./destination-fixtures.mjs";
 
 const userId = "00000000-0000-4000-8000-000000000001", key = "test-internal-application-key-never-real";
-const files = ["20261028000100_create_trips.sql", "20261028000200_destination_intelligence.sql", "20261028000300_open_destination_providers.sql", "20261028000400_accommodation_selections.sql", "20261029000500_food_selections.sql"];
+const files = ["20261028000100_create_trips.sql", "20261028000200_destination_intelligence.sql", "20261028000300_open_destination_providers.sql", "20261028000400_accommodation_selections.sql", "20261029000500_food_selections.sql", "20261029000600_itinerary_versions.sql", "20261029000700_trip_budget_entries.sql"];
 const migrations = await Promise.all(files.map(name => readFile(new URL(`../supabase/migrations/${name}`, import.meta.url), "utf8")));
 
-for (const installed of [1, 2, 3, 4, 5]) test(`prepared database setup upgrades stage ${installed}, saves a signed trip and is safe to rerun`, async () => {
+for (const installed of [1, 2, 3, 4, 5, 6, 7]) test(`prepared database setup upgrades stage ${installed}, saves a signed trip and is safe to rerun`, async () => {
   const db = new PGlite({ extensions: { pgcrypto } });
   try {
     await db.exec(`create role anon; create role authenticated; create schema auth;
@@ -20,8 +20,10 @@ for (const installed of [1, 2, 3, 4, 5]) test(`prepared database setup upgrades 
       grant usage on schema auth to anon,authenticated;
       insert into auth.users values ('${userId}');`);
     for (let index = 0; index < installed; index++) await db.exec(migrations[index]);
-    const setup = buildTripDatabaseSetup(migrations[1], migrations[2], key, migrations[3], migrations[4]);
+    const setup = buildTripDatabaseSetup(migrations[1], migrations[2], key, migrations[3], migrations[4], migrations[5], migrations[6]);
     await db.exec(setup);
+    assert.equal((await db.query("select to_regclass('public.trip_budget_entries')::text as name")).rows[0].name, "trip_budget_entries");
+    assert.equal((await db.query("select to_regclass('public.itinerary_items')::text as name")).rows[0].name, "itinerary_items");
     assert.equal((await db.query("select to_regclass('public.trip_accommodation_selections')::text as name")).rows[0].name, "trip_accommodation_selections");
     assert.equal((await db.query("select to_regclass('public.trip_food_selections')::text as name")).rows[0].name, "trip_food_selections");
     const now = Math.floor(Date.now() / 1000);

@@ -56,9 +56,14 @@ Render prompts for these environment values. Enter them in the dashboard:
 | `FRONTEND_ORIGIN` | Your planned Vercel HTTPS origin; update it if the assigned domain differs |
 | `STAYAPI_API_KEY` | Your live StayAPI key |
 | `GEOAPIFY_API_KEY` | Your Geoapify key |
+| `GEMINI_API_KEY` | Your private Gemini key; FastAPI only |
 
 The Blueprint sets `APP_ENV=production`, live accommodation/food providers, demo
 accommodations disabled, and the configurable Open-Meteo/Overpass endpoints.
+It also sets `LLM_PROVIDER=gemini` and `GEMINI_MODEL=gemini-3.8-flash` for Step 9.
+For an existing Render service, add `GEMINI_API_KEY` manually before redeploying:
+Blueprint secret prompts apply only during initial service creation. The itinerary
+database migration is included by `npm run db:prepare`; apply the generated SQL.
 Set `PROVIDER_USER_AGENT` to an identifying value such as `NomviraAI/0.1` plus your
 actual website/contact once available. No secrets belong in this header.
 The startup check reports missing/mistyped settings without printing their values.
@@ -104,6 +109,8 @@ Use real origins, without paths or queries. Do not use localhost, the Render
 internal hostname, a Supabase dashboard URL or a Supabase secret/service-role key.
 Keep StayAPI and Geoapify keys only in Render. Never prefix private keys with
 `NEXT_PUBLIC_`.
+Keep `GEMINI_API_KEY` only in Render too. The itinerary generation function uses a
+180-second execution limit around its bounded backend call and signed persistence.
 
 The build check rejects missing settings, localhost URLs, placeholder credentials
 and known private keys exposed through public variables. It does not log values
@@ -141,6 +148,9 @@ service-role credential or RLS bypass is required.
 5. Reload the trip. Saved places should display without another Overpass request.
 6. Verify live hotels/food and saved selections; production must never use fixtures.
 7. Sign in as another user and verify they cannot read the first user's trip.
+8. Open **Itinerary**, generate once, reload, then deliberately generate a new
+   version after the cooldown. Verify old versions remain and no extra request
+   occurs on rendering. See [Step 9 acceptance steps](STEP9_REPORT.md#validation-and-manual-acceptance).
 
 If discovery fails, inspect the safe error code in Vercel/Render logs:
 

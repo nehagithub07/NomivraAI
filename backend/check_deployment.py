@@ -11,7 +11,12 @@ def deployment_errors(settings: Settings) -> list[str]:
     errors = []
     if settings.app_env != "production":
         errors.append("APP_ENV must be production.")
-    for name in ("nomvira_internal_api_key", "stayapi_api_key", "geoapify_api_key"):
+    for name in (
+        "nomvira_internal_api_key",
+        "stayapi_api_key",
+        "geoapify_api_key",
+        "gemini_api_key",
+    ):
         value = getattr(settings, name).get_secret_value()
         minimum = 32 if name == "nomvira_internal_api_key" else 1
         if (
@@ -24,6 +29,8 @@ def deployment_errors(settings: Settings) -> list[str]:
         errors.append("Use ACCOMMODATION_PROVIDER=stayapi and ALLOW_DEMO_ACCOMMODATIONS=false.")
     if settings.food_provider != "geoapify":
         errors.append("Use FOOD_PROVIDER=geoapify in production.")
+    if settings.llm_provider != "gemini":
+        errors.append("Use LLM_PROVIDER=gemini in production.")
     for name in (
         "frontend_origin",
         "open_meteo_geocoding_url",

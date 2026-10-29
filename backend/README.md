@@ -250,7 +250,7 @@ Live selections remain saved after prices expire; their latest name can be shown
 
 Run `npm.cmd run test:accommodations` in addition to the validation commands above. Python tests mock all StayAPI calls; no unit or browser test consumes the evaluation quota. PostgreSQL tests execute the real migration chain, signed selection function, RLS, replacement conflicts, rollback and cascades. Browser evidence under ignored `.qa` covers all five sorts, no-network filtering, demo/quota/empty/error/expired/selected states, keyboard dialogs and six responsive widths. See [STEP7_REPORT.md](../STEP7_REPORT.md) for the final counts, exact files and remaining external setup. A real StayAPI search cannot be claimed until credentials are configured and the integration is smoke-tested with that account.
 
-Primary destination references: [Open-Meteo geocoding fields and lookup](https://open-meteo.com/en/docs/geocoding-api), [Open-Meteo terms](https://open-meteo.com/en/terms), [Overpass QL](https://wiki.openstreetmap.org/wiki/Overpass_API/Overpass_QL), [public Overpass guidelines](https://dev.overpass-api.de/overpass-doc/en/preface/commons.html), [OSM licensing](https://www.openstreetmap.org/copyright). Weather, maps, routing and AI planning remain later steps.
+Primary destination references: [Open-Meteo geocoding fields and lookup](https://open-meteo.com/en/docs/geocoding-api), [Open-Meteo terms](https://open-meteo.com/en/terms), [Overpass QL](https://wiki.openstreetmap.org/wiki/Overpass_API/Overpass_QL), [public Overpass guidelines](https://dev.overpass-api.de/overpass-doc/en/preface/commons.html), [OSM licensing](https://www.openstreetmap.org/copyright). Weather, maps and routing remain later steps; Step 9 adds AI planning over existing data.
 
 ## Food engine
 
@@ -269,3 +269,39 @@ The [Geoapify Free plan](https://www.geoapify.com/pricing/) currently advertises
 Apply `20261029000500_food_selections.sql` after migrations 1–4 before saving food. It creates `trip_food_selections`, an idempotent unique trip/provider/place constraint, owned-trip RLS and the signed `save_trip_food` RPC. Only saved identifiers, names, category and save time persist; unsaved searches remain transient. `npm run db:prepare` includes this migration and retains the existing private database-key workflow. The generated SQL is private and ignored by Git; run it in the matching Supabase project's SQL Editor without sharing it.
 
 Run `npm run test:food` from the root, and `.venv/Scripts/python.exe -m pytest -q` plus Ruff from `backend`. All provider calls in tests are mocked. See [STEP8_REPORT.md](../STEP8_REPORT.md) for the file list, score weights, browser evidence, security checks and outstanding live activation requirements. Optional Overpass food fallback and on-demand provider Place Details are not needed by this version and were not added.
+
+## Itinerary engine
+
+Step 9 adds `POST /api/v1/itineraries/generate` behind the existing internal-key
+dependency. The authenticated Next.js BFF loads the owned trip and saved real
+candidates; browsers cannot submit planning context. The context builder computes
+inclusive dates, pace limits, straight-line proximity and Decimal budget math.
+The Gemini adapter uses `google-genai==2.34.0`, async structured Pydantic output,
+`gemini-3.8-flash`, no HTTP retries, and at most one service-controlled semantic repair.
+
+Install the updated backend requirements and add:
+
+```dotenv
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=your-private-key
+GEMINI_MODEL=gemini-3.8-flash
+```
+
+Keep these in `backend/.env` or Render only. Never expose the key through Next.js.
+For explicit local testing, `LLM_PROVIDER=fixture` with `APP_ENV=development`
+plans over the supplied real candidate IDs and displays a development label.
+Production rejects fixture planning. Missing keys and provider failures remain
+safe application errors and do not affect previous saved itineraries.
+
+Apply `20261029000600_itinerary_versions.sql` after migrations 1–5, or use the
+updated private `npm run db:prepare` output. It adds owned version/day/item tables,
+immutable signed writes, idempotent generation reservations, bounded abandoned-job
+recovery and an atomic current-version switch. Hotel quote metadata stays
+transient under the existing retention policy. Only saved real food associations
+are scheduled; planning does not launch extra food/hotel/Overpass searches.
+
+Planning currently supports 1–14 inclusive days and 2/3/4 main activities per day
+for relaxed/balanced/packed pace. No routing, factual prose from the model, guessed
+prices, RAG or agent framework is introduced. Run `pytest`, Ruff and the root
+`npm run test:itineraries`. See [STEP9_REPORT.md](../STEP9_REPORT.md) for the full
+file list, protections, time/cost limits, database design and manual acceptance.

@@ -62,9 +62,9 @@ export default async function TripOverviewPage({ params }: TripPageProps) {
           <p className="type-small mt-5 text-muted-foreground">{canDiscover ? trip.destination_timezone || "Timezone not available." : "Destination details not yet enriched."}</p>
           {trip.destination_provider === "open_meteo" && <ProviderAttribution provider="open_meteo" />}
         </SurfaceCard>
-        <EmptyState icon={Route} title="Your itinerary hasn't been generated yet."
-          description="NomviraAI will use your trip preferences, real travel data, and AI planning to build your personalized itinerary."
-          action={<div><Button disabled>Generate itinerary</Button><p className="type-meta mt-3 text-muted-foreground">Available in a future update</p></div>} />
+        <EmptyState icon={Route} title="Plan your trip with AI"
+          description="Use your trip preferences and real discovered places to build or view a personalized day-by-day itinerary."
+          action={<Button asChild><Link href={`/trips/${trip.id}/itinerary`}>Open itinerary planner</Link></Button>} />
       </div>
       {stay && <SelectedStaySummary tripId={trip.id} selection={stay} recentName={recentStay?.name} />}
       <DestinationPlaces tripId={trip.id} canDiscover={canDiscover} initialPlaces={places} loadFailed={placesFailed} />

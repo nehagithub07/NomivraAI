@@ -2,7 +2,7 @@ from app.core.config import Settings
 
 
 def test_secret_defaults_are_empty_and_secrets_load_from_private_environment(tmp_path, monkeypatch):
-    fields = ["nomvira_internal_api_key", "stayapi_api_key", "geoapify_api_key"]
+    fields = ["nomvira_internal_api_key", "stayapi_api_key", "geoapify_api_key", "gemini_api_key"]
     for name in fields:
         assert Settings.model_fields[name].default.get_secret_value() == ""
         monkeypatch.delenv(name.upper(), raising=False)

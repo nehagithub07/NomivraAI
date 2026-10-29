@@ -1,6 +1,6 @@
-# NomviraAI client — Steps 1–6
+# NomviraAI client — Steps 1–9
 
-A light design system, responsive application shell, Home dashboard, Supabase authentication, and a Create Trip Wizard with user-owned PostgreSQL data. Step 6 uses Open-Meteo Geocoding for destinations and OpenStreetMap Overpass for attractions through Python/FastAPI. Step 7 adds a hotel recommendation engine with a StayAPI adapter, explicit development fixtures, deterministic ranking, local filters/sorts and a trip-owned selected stay. No Google Maps key or billing is required. Public no-key destination access is for current non-commercial development, subject to provider terms and fair use. Follow [AUTH_SETUP.md](AUTH_SETUP.md), [TRIPS_SETUP.md](TRIPS_SETUP.md), and [backend/README.md](backend/README.md) for setup. Itinerary generation remains future work.
+A light design system, responsive application shell, Home dashboard, Supabase authentication, and a Create Trip Wizard with user-owned PostgreSQL data. Destination discovery, hotel/food recommendations and Step 9 AI itinerary planning use the existing Next.js BFF, Python/FastAPI providers and signed Supabase persistence. Public destination providers remain subject to their terms and fair use; Gemini planning requires a private API key. Follow [AUTH_SETUP.md](AUTH_SETUP.md), [TRIPS_SETUP.md](TRIPS_SETUP.md), [backend/README.md](backend/README.md), and [STEP9_REPORT.md](STEP9_REPORT.md) for setup.
 
 ## Run locally
 
@@ -24,6 +24,8 @@ npm run test:auth
 npm run test:trips
 npm run test:destinations
 npm run test:accommodations
+npm run test:food
+npm run test:itineraries
 ```
 
 ## Foundation
@@ -74,7 +76,7 @@ The seven steps are **Destination → Dates → Travelers → Budget → Interes
 - Interests require 1–8 selections. Balanced style/pace, 1 traveler, and Hotel are defaults. An empty dietary array means No preference. Optional special requests are limited to 500 characters.
 - Accessible option inputs, step announcements, field errors, loading states, and duplicate-click protection are included. Database/network errors preserve values. An expired session offers sign-in in another tab. Drafts remain in memory; refresh/leaving clears them.
 - The authenticated Server Action explicitly maps user input and sends signed provider data to `create_resolved_trip`, which validates identity/proof and reuses Step 5's atomic trip/interests creation. Canonical name, provider ID, display name, country/admin fields, coordinates, timezone and feature/population data are persisted. Both trip tables retain RLS, restricted grants, constraints, and indexes.
-- My Trips and the UUID overview use real user-owned rows. The overview displays the saved requirements and a disabled itinerary action. Edit/delete UI and AI generation are future work.
+- My Trips and the UUID overview use real user-owned rows. The overview displays the saved requirements and links to the versioned AI itinerary planner. Trip edit/delete UI remains future work.
 
 See [TRIPS_SETUP.md](TRIPS_SETUP.md) for migration deployment, existing legacy-table preservation, all columns/policies/indexes, and manual type alignment. See [STEP5_REPORT.md](STEP5_REPORT.md) for the file list and verification results.
 
@@ -103,3 +105,18 @@ Local development is configured for clearly labeled demo accommodations without 
 Open a saved trip and choose **Food**. **Find food spots** searches around its trusted destination coordinates. Category, cuisine, diet and distance filters refine loaded places; **Search food again** updates the provider pool and deterministic recommendations. Recommended, Distance and Name sorting make no provider calls. Cards use category illustrations and genuine supplied metadata, without fabricated ratings or guessed opening status.
 
 Configure `GEOAPIFY_API_KEY` and `FOOD_PROVIDER=geoapify` only in **backend/.env**, then restart FastAPI. Development also supports explicit `FOOD_PROVIDER=fixture` or **Browse demo food spots** after an error; fixtures are disabled in production. Multiple places can be saved without scheduling them, and removal asks for confirmation. Apply `20261029000500_food_selections.sql` before saving; `db:prepare` includes it. See [Food Engine setup](backend/README.md#food-engine) and [STEP8_REPORT.md](STEP8_REPORT.md) for limits, ranking, source attribution, tests and the remaining external activation steps. Run `npm run test:food` for Food domain, BFF and PostgreSQL/RLS checks.
+
+## AI itinerary planning
+
+Open a saved trip and choose **Itinerary**. Step 9 uses Gemini as a planner over
+trusted trip preferences, discovered attractions and optional saved food/selected
+hotel references. The server validates IDs, dates and pace limits, fills display
+facts from real candidates, then saves an immutable numbered itinerary version
+through signed, trip-owned RPCs. Previous versions remain available.
+
+Set `LLM_PROVIDER=gemini`, `GEMINI_API_KEY` and `GEMINI_MODEL=gemini-3.8-flash` only
+in FastAPI's private environment. Apply `20261029000600_itinerary_versions.sql`
+(included by `npm run db:prepare`). Planning supports 1–14 inclusive days, requires
+discovered attractions, and never guesses venues, prices or travel times. See
+[STEP9_REPORT.md](STEP9_REPORT.md) for setup, validation, bounded repair behavior,
+development fixtures and manual verification.

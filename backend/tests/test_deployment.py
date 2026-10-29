@@ -12,6 +12,7 @@ CONFIGURED = {
     "nomvira_internal_api_key": "test-internal-application-key-never-real",
     "stayapi_api_key": "test-stayapi-key-never-real",
     "geoapify_api_key": "test-geoapify-key-never-real",
+    "gemini_api_key": "test-gemini-key-never-real",
 }
 
 
@@ -29,6 +30,8 @@ def test_complete_production_environment():
         ({"nomvira_internal_api_key": "PRIVATE"}, "NOMVIRA_INTERNAL_API_KEY"),
         ({"stayapi_api_key": ""}, "STAYAPI_API_KEY"),
         ({"geoapify_api_key": ""}, "GEOAPIFY_API_KEY"),
+        ({"gemini_api_key": ""}, "GEMINI_API_KEY"),
+        ({"llm_provider": "fixture"}, "LLM_PROVIDER"),
         ({"food_provider": "fixture"}, "FOOD_PROVIDER"),
         ({"accommodation_provider": "fixture"}, "ACCOMMODATION_PROVIDER"),
         ({"allow_demo_accommodations": True}, "ALLOW_DEMO_ACCOMMODATIONS"),

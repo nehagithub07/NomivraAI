@@ -12,6 +12,7 @@ from app.core.rate_limit import ProviderLimits
 from app.core.search_cache import DestinationSearchCache
 from app.services.food_recommendation_service import FoodRecommendationService
 from app.services.hotel_recommendation_service import HotelRecommendationService
+from app.services.itinerary_generation_service import ItineraryGenerationService
 
 
 def create_app(
@@ -32,6 +33,7 @@ def create_app(
             app.state.http = client
             app.state.accommodations = HotelRecommendationService(app.state.settings, client)
             app.state.food = FoodRecommendationService(app.state.settings, client)
+            app.state.itineraries = ItineraryGenerationService(app.state.settings)
             yield
 
     app = FastAPI(title="Nomvira API", version="0.1.0", lifespan=lifespan)
