@@ -71,3 +71,4 @@ Patterns follow the official [Supabase RLS guide](https://supabase.com/docs/guid
 5. Verify real expired sessions and network failures preserve the wizard and allow retry after sign-in. Local contract/offline checks do not establish hosted provider/cookie behavior.
 
 No existing-trip edit/delete UI, AI itinerary, external travel API, currency conversion, or budget allocation engine is included.
+

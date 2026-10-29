@@ -1,15 +1,178 @@
+# =========================================================
+# NomivraAI
+# Next.js + FastAPI + Supabase
+# =========================================================
+
+
+# ---------------------------------------------------------
+# Node / Next.js
+# ---------------------------------------------------------
+
 node_modules/
 .next/
 out/
+dist/
+build/
+.turbo/
+*.tsbuildinfo
+
+# Package manager logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+
+# ---------------------------------------------------------
+# Testing / Coverage
+# ---------------------------------------------------------
+
 coverage/
+.nyc_output/
 playwright-report/
 test-results/
-*.tsbuildinfo
+blob-report/
+htmlcov/
+
+# Local QA / generated verification files
 .qa/
-.env*
-!.env.example
+
+
+# ---------------------------------------------------------
+# Environment variables / Secrets
+# ---------------------------------------------------------
+
+.env
 .env.local
-backend/.venv/
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+.env.*
+
+# Keep safe templates
+!.env.example
+!backend/.env.example
+
+
+# ---------------------------------------------------------
+# Python / FastAPI
+# ---------------------------------------------------------
+
 __pycache__/
+*.py[cod]
+*$py.class
+
+.venv/
+venv/
+env/
+ENV/
+backend/.venv/
+
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+.pyright/
+.pyre/
+
+.coverage
+.coverage.*
+
+*.egg
+*.egg-info/
+.eggs/
+
+pip-wheel-metadata/
+
+
+# ---------------------------------------------------------
+# Local databases
+# ---------------------------------------------------------
+
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+
+# ---------------------------------------------------------
+# Supabase local state
+# ---------------------------------------------------------
+
+supabase/.temp/
+supabase/.branches/
+
+
+# ---------------------------------------------------------
+# Deployment platforms
+# ---------------------------------------------------------
+
+.vercel/
+
+
+# ---------------------------------------------------------
+# Logs
+# ---------------------------------------------------------
+
+*.log
+logs/
+
+
+# ---------------------------------------------------------
+# Temporary files / caches
+# ---------------------------------------------------------
+
+.cache/
+tmp/
+temp/
+*.tmp
+*.temp
+
+
+# ---------------------------------------------------------
+# OS generated files
+# ---------------------------------------------------------
+
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+Thumbs.db
+Thumbs.db:encryptable
+Desktop.ini
+
+
+# ---------------------------------------------------------
+# IDE / Editor
+# ---------------------------------------------------------
+
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+
+# VS Code:
+# Ignore personal workspace settings.
+.vscode/
+
+# If you later want shared team settings, replace the line
+# above with:
+#
+# .vscode/*
+# !.vscode/settings.json
+# !.vscode/extensions.json
+
+
+# ---------------------------------------------------------
+# Misc
+# ---------------------------------------------------------
+
+*.bak
+*.orig
