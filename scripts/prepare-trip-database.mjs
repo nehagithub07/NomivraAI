@@ -6,13 +6,13 @@ function transactionBody(sql) {
   return sql.replace(/^\s*begin;\s*/i, "").replace(/\s*commit;\s*$/i, "");
 }
 
-export function buildTripDatabaseSetup(foundation, openProviders, internalKey, accommodations = "") {
+export function buildTripDatabaseSetup(foundation, openProviders, internalKey, accommodations = "", food = "") {
   if (typeof internalKey !== "string" || internalKey.length < 32) throw new Error("Configure NOMVIRA_INTERNAL_API_KEY in .env.local first.");
-  if (foundation.includes("$nomvira_foundation$") || openProviders.includes("$nomvira_open_providers$") || accommodations.includes("$nomvira_accommodations$")) throw new Error("Unexpected migration delimiter.");
+  if (foundation.includes("$nomvira_foundation$") || openProviders.includes("$nomvira_open_providers$") || accommodations.includes("$nomvira_accommodations$") || food.includes("$nomvira_food$")) throw new Error("Unexpected migration delimiter.");
   const secret = internalKey.replaceAll("'", "''");
   return `-- PRIVATE LOCAL FILE: contains the internal application secret. Do not share or commit.
 -- Run once in your project's Supabase SQL Editor as database owner.
--- Atomic and safe to rerun against the supported Step 5/6/7 schema.
+-- Atomic and safe to rerun against the supported Step 5/6/7/8 schema.
 begin;
 do $nomvira_setup$
 begin
@@ -28,6 +28,9 @@ begin
   end if;
   ${accommodations ? `if to_regclass('public.trip_accommodation_selections') is null then
     execute $nomvira_accommodations$${transactionBody(accommodations)}$nomvira_accommodations$;
+  end if;` : ""}
+  ${food ? `if to_regclass('public.trip_food_selections') is null then
+    execute $nomvira_food$${transactionBody(food)}$nomvira_food$;
   end if;` : ""}
   if to_regclass('nomvira_private.application_secrets') is null
     or to_regprocedure('public.create_resolved_trip(jsonb,text,text)') is null then
@@ -48,14 +51,15 @@ export async function prepareTripDatabase(root = process.cwd()) {
   const match = envText.match(/^\s*NOMVIRA_INTERNAL_API_KEY\s*=\s*(?:"([^"\r\n]*)"|'([^'\r\n]*)'|([^#\r\n]*))/m);
   const internalKey = match && (match[1] ?? match[2] ?? match[3]).trim();
   const directory = path.join(root, "supabase", "migrations");
-  const [foundation, openProviders, accommodations] = await Promise.all([
+  const [foundation, openProviders, accommodations, food] = await Promise.all([
     readFile(path.join(directory, "20261028000200_destination_intelligence.sql"), "utf8"),
     readFile(path.join(directory, "20261028000300_open_destination_providers.sql"), "utf8"),
     readFile(path.join(directory, "20261028000400_accommodation_selections.sql"), "utf8"),
+    readFile(path.join(directory, "20261029000500_food_selections.sql"), "utf8"),
   ]);
   const output = path.join(root, ".qa", "setup-trip-database.sql");
   await mkdir(path.dirname(output), { recursive: true });
-  await writeFile(output, buildTripDatabaseSetup(foundation, openProviders, internalKey, accommodations), { mode: 0o600 });
+  await writeFile(output, buildTripDatabaseSetup(foundation, openProviders, internalKey, accommodations, food), { mode: 0o600 });
   return output;
 }
 

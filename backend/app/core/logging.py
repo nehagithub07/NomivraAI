@@ -28,6 +28,14 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
 
 def configure_logging() -> None:
+    application = logging.getLogger("nomvira")
+    application.setLevel(logging.INFO)
+    # Uvicorn configures its own loggers, not the application namespace.
+    # Respect an existing host/test logging setup and avoid duplicate handlers.
+    if not application.hasHandlers():
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(levelname)s %(name)s %(message)s"))
+        application.addHandler(handler)
     # Provider request URLs contain search input. Log no outbound URLs by default.
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)

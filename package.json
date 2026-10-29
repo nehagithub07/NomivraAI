@@ -13,6 +13,7 @@
     "test:auth": "node --experimental-strip-types --test tests/auth.test.mjs",
     "test:trips": "node --experimental-strip-types --test tests/trips.test.mjs",
     "test:accommodations": "node --experimental-strip-types --test tests/accommodations.test.mjs tests/accommodations-db.test.mjs tests/accommodations-bff.test.mjs",
+    "test:food": "node --experimental-strip-types --test tests/food.test.mjs tests/food-db.test.mjs tests/food-bff.test.mjs",
     "test:destinations": "node --experimental-strip-types --test tests/destinations.test.mjs tests/destinations-db.test.mjs tests/destinations-bff.test.mjs tests/trip-database-setup.test.mjs"
   },
   "dependencies": {

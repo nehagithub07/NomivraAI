@@ -6,6 +6,10 @@ export function discoveryErrorMessage(code: unknown): string {
     case "provider_rate_limited":
     case "discovery_in_progress":
       return "Place discovery is busy. Please wait a little before trying again. Your trip is saved.";
+    case "PLACES_RATE_LIMITED":
+      return "Place discovery is busy. Please try again shortly. Your trip is saved.";
+    case "PLACES_PROVIDER_RATE_LIMITED":
+      return "The places provider is temporarily busy. Please try again shortly. Your trip is saved.";
     case "unauthorized":
       return "Sign in again to discover places. Your trip is saved.";
     case "persistence_unavailable":

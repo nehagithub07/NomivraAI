@@ -233,14 +233,12 @@ def test_node_way_relation_normalization_dedupe_distance_and_metadata():
         from urllib.parse import parse_qs
 
         query = parse_qs(request.content.decode())["data"][0]
-        assert "around:10000" in query
-        assert "[timeout:18]" in query
-        assert "[maxsize:67108864]" in query
-        assert "out tags center" in query
-        # Each type filter must finish before the separate output statement.
-        assert "node.candidates;out body 40;" in query
-        assert "way.candidates;out tags center 40;" in query
-        assert "relation.candidates;out tags center 40;" in query
+        assert "around:" not in query
+        assert "[timeout:25]" in query
+        assert "[maxsize:33554432]" in query
+        assert "out center qt 50;" in query
+        assert 'nwr["tourism"' in query
+        assert 'nwr["historic"' in query
         assert "restaurant" not in query
         assert "out geom" not in query
         return httpx.Response(
@@ -272,7 +270,7 @@ def test_node_way_relation_normalization_dedupe_distance_and_metadata():
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["radius_meters"] == 10000
+        assert data["radius_meters"] == 5000
         places = data["places"]
         assert [item["provider_place_id"] for item in places] == ["node/1", "way/2", "relation/3"]
         assert [item["category"] for item in places] == ["museum", "park", "historic"]
@@ -359,7 +357,7 @@ def test_overpass_timeout_empty_result_and_partial_error():
             )
 
 
-def test_application_limits_block_repeated_discovery_and_excessive_search():
+def test_rapid_sequential_discovery_succeeds_and_geocoding_limit_is_unchanged():
     with client(lambda _: httpx.Response(200, json={"elements": []})) as api:
         assert (
             api.post(
@@ -371,7 +369,7 @@ def test_application_limits_block_repeated_discovery_and_excessive_search():
             api.post(
                 "/api/v1/places/discover", headers=HEADERS, json={"latitude": 0, "longitude": 0}
             ).status_code
-            == 429
+            == 200
         )
     with client(lambda _: httpx.Response(200, json={})) as api:
         for _ in range(60):
@@ -425,6 +423,7 @@ async def test_concurrent_discovery_never_sends_parallel_provider_requests():
     app = create_app(
         Settings(_env_file=None, nomvira_internal_api_key=KEY), httpx.MockTransport(handler)
     )
+    app.state.limits.discovery_cooldown_seconds = 0.01
     async with (
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
@@ -436,11 +435,16 @@ async def test_concurrent_discovery_never_sends_parallel_provider_requests():
         )
         await entered.wait()
         try:
-            second = await api.post(
-                "/api/v1/places/discover", headers=HEADERS, json={"latitude": 0, "longitude": 0}
+            second = asyncio.create_task(
+                api.post(
+                    "/api/v1/places/discover", headers=HEADERS, json={"latitude": 0, "longitude": 0}
+                )
             )
-            assert second.status_code == 429
+            await asyncio.sleep(0.01)
+            assert not second.done()
             assert calls == 1
         finally:
             release.set()
         assert (await first).status_code == 200
+        assert (await second).status_code == 200
+        assert calls == 2

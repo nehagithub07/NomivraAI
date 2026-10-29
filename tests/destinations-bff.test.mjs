@@ -128,3 +128,46 @@ test("create trip verifies user-bound proof and ignores browser coordinate tampe
   const expired = await load("src/lib/trips/actions.ts", { user: null }).createTrip(values, { timeZone: "UTC" });
   assert.equal(expired.sessionExpired, true); assert.equal(calls, 1);
 });
+
+function discoveryDatabase() {
+  return {
+    from() { return this; }, select() { return this; }, eq() { return this; }, order() { return this; },
+    async limit() { return { data: [], error: null }; },
+    async maybeSingle() { return { data: { destination_provider: "open_meteo", destination_provider_id: "1850147", destination_latitude: destination.latitude, destination_longitude: destination.longitude }, error: null }; },
+    async rpc() { return { data: 1, error: null }; },
+  };
+}
+
+test("discovery preserves local/provider 429 codes, never retries, and allows the backend time budget", async t => {
+  configure(t); const db = discoveryDatabase(); let calls = 0, code = "PLACES_RATE_LIMITED";
+  const timeouts = [], originalTimeout = AbortSignal.timeout;
+  t.mock.method(AbortSignal, "timeout", milliseconds => { timeouts.push(milliseconds); return originalTimeout(milliseconds); });
+  t.mock.method(globalThis, "fetch", async () => { calls++; return Response.json({ error: { code, message: "PRIVATE provider details" } }, { status: 429 }); });
+  const { POST } = load("src/app/api/trips/[tripId]/discover-places/route.ts", { db });
+  for (const expected of ["PLACES_RATE_LIMITED", "PLACES_PROVIDER_RATE_LIMITED"]) {
+    code = expected; const before = calls;
+    const response = await POST(post(), { params: Promise.resolve({ tripId }) });
+    assert.equal(response.status, 429); const body = await response.json();
+    assert.equal(body.error.code, expected); assert.ok(!JSON.stringify(body).includes("PRIVATE"));
+    assert.equal(calls, before + 1, "429 must not be retried automatically");
+  }
+  assert.deepEqual(timeouts, [60000, 60000]);
+});
+
+for (const status of [200, 429]) test(`overlapping owned-trip discovery shares one backend request and clears in-flight state after ${status}`, async t => {
+  configure(t); let calls = 0, writes = 0, complete, entered;
+  const waiting = new Promise(resolve => { complete = resolve; }), started = new Promise(resolve => { entered = resolve; });
+  const db = discoveryDatabase(); db.rpc = async (name, args) => { writes++; assert.equal(name, "persist_trip_place_candidates"); assert.ok(verifyProof(args.p_payload, args.p_signature, key)); return { data: 1, error: null }; };
+  const result = { latitude: destination.latitude, longitude: destination.longitude, radius_meters: 5000, places: [place] };
+  t.mock.method(globalThis, "fetch", async () => { calls++; entered(); await waiting; return status === 200 ? Response.json(result) : Response.json({ error: { code: "PLACES_PROVIDER_RATE_LIMITED" } }, { status: 429 }); });
+  const { POST } = load("src/app/api/trips/[tripId]/discover-places/route.ts", { db });
+  const invoke = () => POST(post(), { params: Promise.resolve({ tripId }) });
+  const first = invoke(); await started; const second = invoke();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(calls, 1); assert.equal(writes, 0); complete();
+  const responses = await Promise.all([first, second]);
+  assert.deepEqual(responses.map(response => response.status), [status, status]);
+  assert.deepEqual(await responses[0].json(), await responses[1].json());
+  assert.equal(writes, status === 200 ? 1 : 0);
+  assert.equal((await invoke()).status, status); assert.equal(calls, 2, "settled requests must leave no stuck in-flight entry");
+});

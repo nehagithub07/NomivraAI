@@ -3,11 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import { callTravelApi, internalKey, TravelError } from "@/lib/destinations/backend";
 import { travelRoute } from "@/lib/destinations/bff";
 import { signProof } from "@/lib/destinations/proof";
-import { discoveryResponseSchema } from "@/lib/destinations/validation";
+import { discoveryResponseSchema, type NormalizedPlace } from "@/lib/destinations/validation";
 import { getPersistedPlaces } from "@/lib/destinations/persistence";
 
-// Process-local duplicate protection; the backend additionally serializes all Overpass calls.
-const inFlight = new Set<string>();
+// Authenticated requests for the same owned trip share one bounded backend fetch/write.
+const inFlight = new Map<string, Promise<{ places: NormalizedPlace[] }>>();
 export async function POST(request: Request, { params }: { params: Promise<{ tripId: string }> }) {
   return travelRoute(request, z.object({}).strict(), async (_body, userId) => {
     const { tripId } = await params;
@@ -18,17 +18,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ tri
     if (error) throw new TravelError("database_unavailable", "We couldn't load your trip. Please try again.");
     if (!trip) throw new TravelError("not_found", "Trip not found.", 404);
     if (trip.destination_provider !== "open_meteo" || !trip.destination_provider_id || trip.destination_latitude === null || trip.destination_longitude === null) throw new TravelError("unresolved_destination", "This trip's destination details are not available yet.", 409);
-    if (inFlight.has(tripId)) throw new TravelError("discovery_in_progress", "Place discovery is already in progress.", 429);
-    inFlight.add(tripId);
-    try {
-      const places = await getPersistedPlaces(db, tripId);
-      if (places.length) return { places };
+    console.info("[places] discovery_requested");
+    const places = await getPersistedPlaces(db, tripId);
+    if (places.length) {
+      console.info("[places] discovery_reused", { count: places.length });
+      return { places };
+    }
+    const key = `${userId}:${tripId}`, existing = inFlight.get(key);
+    if (existing) {
+      console.info("[places] discovery_joined");
+      return existing;
+    }
+    const discovery = (async () => {
       const result = await callTravelApi("places/discover", { latitude: trip.destination_latitude, longitude: trip.destination_longitude }, discoveryResponseSchema);
       const now = Math.floor(Date.now() / 1000);
       const payload = JSON.stringify({ kind: "discovery", user_id: userId, trip_id: tripId, expires_at: now + 300, refreshed_at: now, places: result.places });
       const { error: saveError } = await db.rpc("persist_trip_place_candidates", { p_payload: payload, p_signature: signProof(payload, internalKey()) });
       if (saveError) throw new TravelError("persistence_unavailable", "We couldn't save places right now. Your trip is safe.");
+      console.info("[places] discovery_persisted", { count: result.places.length });
       return { places: result.places };
-    } finally { inFlight.delete(tripId); }
+    })();
+    inFlight.set(key, discovery);
+    try { return await discovery; }
+    finally { inFlight.delete(key); }
   });
 }

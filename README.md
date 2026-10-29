@@ -75,7 +75,7 @@ The seven steps are **Destination → Dates → Travelers → Budget → Interes
 
 See [TRIPS_SETUP.md](TRIPS_SETUP.md) for migration deployment, existing legacy-table preservation, all columns/policies/indexes, and manual type alignment. See [STEP5_REPORT.md](STEP5_REPORT.md) for the file list and verification results.
 
-If creating a trip or saving a stay needs a database setup update, run `npm run db:prepare`. Run the generated private `.qa/setup-trip-database.sql` in your Supabase SQL Editor to install missing Step 6/7 migrations and configure the matching database secret atomically. The command prepares the file without changing the hosted database; see [backend/README.md](backend/README.md#database-migration-and-deployment). Existing trips are retained. Recent destination searches are cached in memory to avoid repeated provider and authentication requests.
+If creating a trip, saving a stay or saving a food spot needs a database setup update, run `npm run db:prepare`. Run the generated private `.qa/setup-trip-database.sql` in your Supabase SQL Editor to install missing Step 6/7/8 migrations and configure the matching database secret atomically. The command prepares the file without changing the hosted database; see [backend/README.md](backend/README.md#database-migration-and-deployment). Existing trips are retained. Recent destination searches are cached in memory to avoid repeated provider and authentication requests.
 
 ## Authentication
 
@@ -94,3 +94,9 @@ Step 6 adds `GeocodingProvider`/`PlacesProvider` interfaces with Open-Meteo/Over
 Open a saved trip and choose **Hotels**. **Find stays** performs a deliberate search; filters and all five sorts operate on the loaded candidates. Cards keep star classification separate from guest scores and prioritize known total-stay quotes. Replacement asks for confirmation. The selected stay is visible on Hotels and Overview and remains saved when temporary quotes expire.
 
 Local development is configured for clearly labeled demo accommodations without any StayAPI requests. For live inventory, configure `STAYAPI_API_KEY` and `ACCOMMODATION_PROVIDER=stayapi` in **backend/.env**, then restart FastAPI. The key never belongs in the root environment or browser. Production disables fixture search. Read [Accommodation Engine setup](backend/README.md#accommodation-engine) and [STEP7_REPORT.md](STEP7_REPORT.md) for quota behavior, ranking assumptions, storage policy and verification limits. Apply migration `20261028000400_accommodation_selections.sql` before saving a stay; `db:prepare` includes it automatically.
+
+## Food recommendations
+
+Open a saved trip and choose **Food**. **Find food spots** searches around its trusted destination coordinates. Category, cuisine, diet and distance filters refine loaded places; **Search food again** updates the provider pool and deterministic recommendations. Recommended, Distance and Name sorting make no provider calls. Cards use category illustrations and genuine supplied metadata, without fabricated ratings or guessed opening status.
+
+Configure `GEOAPIFY_API_KEY` and `FOOD_PROVIDER=geoapify` only in **backend/.env**, then restart FastAPI. Development also supports explicit `FOOD_PROVIDER=fixture` or **Browse demo food spots** after an error; fixtures are disabled in production. Multiple places can be saved without scheduling them, and removal asks for confirmation. Apply `20261029000500_food_selections.sql` before saving; `db:prepare` includes it. See [Food Engine setup](backend/README.md#food-engine) and [STEP8_REPORT.md](STEP8_REPORT.md) for limits, ranking, source attribution, tests and the remaining external activation steps. Run `npm run test:food` for Food domain, BFF and PostgreSQL/RLS checks.

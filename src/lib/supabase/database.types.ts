@@ -56,6 +56,10 @@ export type AccommodationSelectionRow = {
   provider_accommodation_id: string; selected_name: string | null;
   search_context: Record<string, unknown>; selected_at: string;
 };
+export type FoodSelectionRow = {
+  id: string; trip_id: string; provider: "geoapify" | "fixture"; provider_place_id: string;
+  name: string; category: "restaurant" | "cafe" | "bar" | "pub" | "fast_food" | "food_court" | "dessert" | "other"; saved_at: string;
+};
 
 export type CreateTripArguments = {
   p_destination_name: string;
@@ -76,6 +80,10 @@ export type CreateTripArguments = {
 export type Database = {
   public: {
     Tables: {
+      trip_food_selections: {
+        Row: FoodSelectionRow; Insert: never; Update: never;
+        Relationships: [{ foreignKeyName: "trip_food_selections_trip_id_fkey"; columns: ["trip_id"]; isOneToOne: false; referencedRelation: "trips"; referencedColumns: ["id"] }];
+      };
       trip_accommodation_selections: {
         Row: AccommodationSelectionRow; Insert: never; Update: never;
         Relationships: [{ foreignKeyName: "trip_accommodation_selections_trip_id_fkey"; columns: ["trip_id"]; isOneToOne: true; referencedRelation: "trips"; referencedColumns: ["id"] }];
@@ -100,6 +108,7 @@ export type Database = {
     };
     Views: { [_ in never]: never };
     Functions: {
+      save_trip_food: { Args: { p_payload: string; p_signature: string }; Returns: string };
       select_trip_accommodation: { Args: { p_payload: string; p_signature: string; p_expected_id: string | null }; Returns: string };
       create_trip_with_interests: { Args: CreateTripArguments; Returns: string };
       create_resolved_trip: { Args: { p_form: CreateTripArguments; p_payload: string; p_signature: string }; Returns: string };
