@@ -26,9 +26,14 @@ const unexpected: AuthState = {
 };
 
 function authFailure(
-  error: { code?: string; status?: number },
+  error: { code?: string; status?: number; name?: string },
   login = false,
 ): AuthState {
+  if (error.name === "AuthRetryableFetchError" || error.status === 0)
+    return {
+      status: "error",
+      message: "We couldn't connect to sign-in. Check your connection and try again.",
+    };
   if (
     error.status === 429 ||
     ["over_request_rate_limit", "over_email_send_rate_limit"].includes(

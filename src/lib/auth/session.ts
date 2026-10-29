@@ -5,12 +5,14 @@ import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { getSupabaseConfig } from "@/lib/supabase/config";
 import { safeNextPath } from "./redirect";
+import { AuthVerificationUnavailableError } from "./errors";
 
-export async function getCurrentUser(writable = false) {
+export async function getCurrentUser(writable = false, { failOnUnavailable = false }: { failOnUnavailable?: boolean } = {}) {
   const config = getSupabaseConfig();
 
   if (!config) {
-    console.error("[auth] Supabase configuration is missing");
+    console.warn("[auth] user_verification_unavailable", { reason: "configuration_missing" });
+    if (failOnUnavailable) throw new AuthVerificationUnavailableError();
     return null;
   }
 
@@ -22,21 +24,24 @@ export async function getCurrentUser(writable = false) {
       error,
     } = await supabase.auth.getUser();
 
-    console.log("[auth] getCurrentUser", {
-      writable,
-      hasUser: Boolean(user),
-      userId: user?.id ?? null,
-      error: error?.message ?? null,
-    });
-
     if (error) {
-      console.error("[auth] getUser failed:", error.message);
+      const unavailable = error.name === "AuthRetryableFetchError" || error.status === 0 || error.status === 429 || (error.status !== undefined && error.status >= 500);
+      // A missing session is normal on public sign-in pages. Transient service
+      // failures are handled errors, not uncaught exceptions for the dev overlay.
+      if (error.name !== "AuthSessionMissingError") console.warn("[auth] user_verification_unavailable", {
+        reason: unavailable ? "connection_failed" : "verification_failed",
+        status: error.status,
+      });
+      if (failOnUnavailable && unavailable) throw new AuthVerificationUnavailableError();
       return null;
     }
 
     return user;
   } catch (error) {
-    console.error("[auth] createClient/getUser exception:", error);
+    if (error instanceof AuthVerificationUnavailableError) throw error;
+    // Do not log raw exceptions, URLs or authentication material.
+    console.warn("[auth] user_verification_unavailable", { reason: "unexpected_error" });
+    if (failOnUnavailable) throw new AuthVerificationUnavailableError();
     return null;
   }
 }

@@ -2,7 +2,13 @@ export function discoveryErrorMessage(code: unknown): string {
   switch (code) {
     case "provider_unavailable":
     case "invalid_provider_response":
+    case "PLACES_PROVIDER_UNAVAILABLE":
+    case "PLACES_PROVIDER_INVALID_RESPONSE":
+    case "PLACES_PROVIDER_INVALID_REQUEST":
       return "The places service is temporarily unavailable. Your trip is saved — please try again in a few minutes.";
+    case "PLACES_PROVIDER_CONNECT_TIMEOUT":
+    case "PLACES_PROVIDER_CONNECTION_ERROR":
+      return "We couldn't connect to the places provider. Your trip is saved. Please try again shortly.";
     case "provider_rate_limited":
     case "discovery_in_progress":
       return "Place discovery is busy. Please wait a little before trying again. Your trip is saved.";
@@ -12,6 +18,8 @@ export function discoveryErrorMessage(code: unknown): string {
       return "The places provider is temporarily busy. Please try again shortly. Your trip is saved.";
     case "unauthorized":
       return "Sign in again to discover places. Your trip is saved.";
+    case "auth_unavailable":
+      return "We couldn't verify your sign-in right now. Please try again shortly. Your trip is saved.";
     case "persistence_unavailable":
       return "We found places but couldn't save them. Your trip is safe — please try again.";
     case "database_unavailable":

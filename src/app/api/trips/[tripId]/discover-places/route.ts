@@ -6,6 +6,10 @@ import { signProof } from "@/lib/destinations/proof";
 import { discoveryResponseSchema, type NormalizedPlace } from "@/lib/destinations/validation";
 import { getPersistedPlaces } from "@/lib/destinations/persistence";
 
+// Includes verified auth, owned-trip reads, the bounded backend call and persistence.
+export const runtime = "nodejs";
+export const maxDuration = 120;
+
 // Authenticated requests for the same owned trip share one bounded backend fetch/write.
 const inFlight = new Map<string, Promise<{ places: NormalizedPlace[] }>>();
 export async function POST(request: Request, { params }: { params: Promise<{ tripId: string }> }) {

@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
+import { AuthVerificationUnavailableError } from "@/lib/auth/errors";
 import { TravelError } from "./backend";
 
 export const travelJson = (body: unknown, status = 200) => Response.json(body, {
@@ -11,7 +12,7 @@ export async function travelRoute<T>(request: Request, schema: z.ZodType<T>, run
   try {
     // Route handlers do not inherit app layout authentication.
     // This route owns cookie refresh and authorization in one verified lookup.
-    const user = await getCurrentUser(true);
+    const user = await getCurrentUser(true, { failOnUnavailable: true });
     if (!user) return travelJson({ error: { code: "unauthorized", message: "Sign in to continue." } }, 401);
     const origin = request.headers.get("origin");
     if (origin && origin !== new URL(request.url).origin) return travelJson({ error: { code: "forbidden", message: "Request not allowed." } }, 403);
@@ -42,6 +43,7 @@ export async function travelRoute<T>(request: Request, schema: z.ZodType<T>, run
     if (!data.success) return travelJson({ error: { code: "invalid_request", message: "Check your request details." } }, 422);
     return travelJson(await run(data.data, user.id));
   } catch (error) {
+    if (error instanceof AuthVerificationUnavailableError) return travelJson({ error: { code: "auth_unavailable", message: error.message } }, 503);
     if (error instanceof TravelError) return travelJson({ error: { code: error.code, message: error.message } }, error.status);
     return travelJson({ error: { code: "unavailable", message: "We couldn't complete this request. Please try again." } }, 503);
   }

@@ -26,13 +26,21 @@ async def request_json(
     try:
         async with asyncio.timeout(total_timeout):
             response = await client.request(method, url, **kwargs)
-    except (httpx.TimeoutException, TimeoutError):
+    except httpx.ConnectTimeout:
         if provider == "PLACES":
-            logger.warning("places_provider_timeout")
+            logger.warning("places_provider_timeout phase=connect")
+            raise AppError("PLACES_PROVIDER_CONNECT_TIMEOUT", message, 503) from None
         raise AppError(f"{provider}_PROVIDER_UNAVAILABLE", message, 503) from None
-    except httpx.RequestError:
+    except (httpx.TimeoutException, TimeoutError) as error:
         if provider == "PLACES":
-            logger.warning("places_provider_failure reason=transport")
+            phase = "read" if isinstance(error, httpx.ReadTimeout) else "request"
+            logger.warning("places_provider_timeout phase=%s", phase)
+        raise AppError(f"{provider}_PROVIDER_UNAVAILABLE", message, 503) from None
+    except httpx.RequestError as error:
+        if provider == "PLACES":
+            logger.warning("places_provider_failure reason=transport type=%s", type(error).__name__)
+            if isinstance(error, httpx.ConnectError):
+                raise AppError("PLACES_PROVIDER_CONNECTION_ERROR", message, 503) from None
         raise AppError(f"{provider}_PROVIDER_UNAVAILABLE", message, 503) from None
     if response.status_code == 429:
         if provider == "PLACES":

@@ -4,6 +4,9 @@ A light design system, responsive application shell, Home dashboard, Supabase au
 
 ## Run locally
 
+For Vercel + Render deployment, follow [DEPLOYMENT.md](DEPLOYMENT.md). The Next.js
+app and FastAPI API deploy as separate services; Supabase remains the auth/database.
+
 ```sh
 npm install
 npm run dev

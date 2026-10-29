@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseConfig } from "./config";
 import { isProtectedPath, safeNextPath } from "@/lib/auth/redirect";
+import { supabaseFetch } from "./fetch";
 
 const privateHeaders = {
   "Cache-Control": "private, no-cache, no-store, must-revalidate, max-age=0",
@@ -21,7 +22,7 @@ export async function updateSession(request: NextRequest) {
   if (config) {
     const supabase = createServerClient(config.url, config.key, {
       global: {
-        fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }),
+        fetch: supabaseFetch,
       },
       cookies: {
         getAll: () => request.cookies.getAll(),
@@ -53,15 +54,15 @@ export async function updateSession(request: NextRequest) {
   }
 
   let target: URL | null = null;
-  // Return an action error without navigating away and losing the trip form.
-  // GETs remain protected; the action itself verifies the current user.
-  const tripAction = request.nextUrl.pathname === "/trips/new" &&
-    request.method === "POST" && request.headers.has("next-action");
-  if (!authenticated && isProtectedPath(request.nextUrl.pathname) && !tripAction) {
+  // Server Actions use the React action protocol, not a normal page response.
+  // Let the action authenticate and return its own error/redirect. A raw proxy
+  // redirect here can send login HTML to the action client after session expiry.
+  const serverAction = request.method === "POST" && request.headers.has("next-action");
+  if (!authenticated && isProtectedPath(request.nextUrl.pathname) && !serverAction) {
     target = new URL("/login", request.url);
     target.searchParams.set("next", next);
   } else if (
-    authenticated &&
+    authenticated && !serverAction &&
     ["/login", "/signup"].includes(request.nextUrl.pathname)
   ) {
     target = new URL(

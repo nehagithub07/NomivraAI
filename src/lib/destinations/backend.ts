@@ -9,6 +9,7 @@ export function internalKey() {
   if (!key || key.length < 32) throw new TravelError("configuration_error", "Destination search is temporarily unavailable.");
   return key;
 }
+const discoveryProviderCodes = new Set(["PLACES_RATE_LIMITED", "PLACES_PROVIDER_RATE_LIMITED", "PLACES_PROVIDER_CONNECT_TIMEOUT", "PLACES_PROVIDER_CONNECTION_ERROR", "PLACES_PROVIDER_UNAVAILABLE", "PLACES_PROVIDER_INVALID_RESPONSE", "PLACES_PROVIDER_INVALID_REQUEST"]);
 export async function callTravelApi<T>(endpoint: "destinations/search" | "places/discover", body: Record<string, unknown>, schema: z.ZodType<T>): Promise<T> {
   const key = internalKey(), base = process.env.NOMVIRA_API_URL;
   if (!base) throw new TravelError("configuration_error", "Destination search is temporarily unavailable.");
@@ -32,8 +33,8 @@ export async function callTravelApi<T>(endpoint: "destinations/search" | "places
     if (!searching) {
       const failure = await response.json().catch(() => null);
       const upstreamCode = failure?.error?.code;
-      if (limited && (upstreamCode === "PLACES_RATE_LIMITED" || upstreamCode === "PLACES_PROVIDER_RATE_LIMITED")) code = upstreamCode;
-      console.warn("[places] discovery_backend_failed", { code, status: response.status });
+      if (typeof upstreamCode === "string" && discoveryProviderCodes.has(upstreamCode)) code = upstreamCode;
+      console.warn("[places] discovery_backend_failed", JSON.stringify({ code, status: response.status }));
     }
     throw new TravelError(code, searching ? "Destination search is temporarily unavailable. Please try again." : code === "PLACES_RATE_LIMITED" ? "Place discovery is busy. Please try again shortly." : code === "PLACES_PROVIDER_RATE_LIMITED" ? "Place discovery is temporarily busy. Please try again shortly." : "We couldn't load places right now. Your trip is safe.", limited ? 429 : 503);
   }

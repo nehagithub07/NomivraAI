@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -10,7 +13,9 @@
     "lint": "eslint . --max-warnings=0",
     "typecheck": "next typegen && tsc --noEmit",
     "db:prepare": "node scripts/prepare-trip-database.mjs",
-    "test:auth": "node --experimental-strip-types --test tests/auth.test.mjs",
+    "check:deployment": "node scripts/check-deployment.mjs",
+    "test:deployment": "node --test tests/deployment.test.mjs",
+    "test:auth": "node --experimental-strip-types --test tests/auth.test.mjs tests/auth-network.test.mjs tests/supabase-connector.test.mjs",
     "test:trips": "node --experimental-strip-types --test tests/trips.test.mjs",
     "test:accommodations": "node --experimental-strip-types --test tests/accommodations.test.mjs tests/accommodations-db.test.mjs tests/accommodations-bff.test.mjs",
     "test:food": "node --experimental-strip-types --test tests/food.test.mjs tests/food-db.test.mjs tests/food-bff.test.mjs",
@@ -33,6 +38,7 @@
     "react-hook-form": "7.91.0",
     "server-only": "0.0.1",
     "tailwind-merge": "3.7.0",
+    "undici": "7.30.1",
     "zod": "4.6.7"
   },
   "devDependencies": {

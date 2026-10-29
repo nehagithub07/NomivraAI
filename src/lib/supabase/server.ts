@@ -4,6 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { getSupabaseConfig } from "./config";
 import type { Database } from "./database.types";
+import { supabaseFetch } from "./fetch";
 
 export async function createClient({
   writable = false,
@@ -13,7 +14,7 @@ export async function createClient({
   const cookieStore = await cookies();
   return createServerClient<Database>(config.url, config.key, {
     global: {
-      fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }),
+      fetch: supabaseFetch,
     },
     cookies: {
       getAll: () => cookieStore.getAll(),

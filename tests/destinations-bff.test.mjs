@@ -20,7 +20,7 @@ function load(file, adapters = {}) {
     const localRequire = name => {
       if (name === "server-only") return {};
       if (name === "next/cache") return { revalidatePath: () => {} };
-      if (name === "@/lib/auth/session") return { getCurrentUser: async (writable) => { adapters.onAuth?.(writable); return adapters.user === null ? null : { id: userId }; } };
+      if (name === "@/lib/auth/session") return { getCurrentUser: async (writable, options) => { adapters.onAuth?.(writable, options); if (adapters.authUnavailable) throw new (moduleAt(path.resolve("src/lib/auth/errors.ts")).AuthVerificationUnavailableError)(); return adapters.user === null ? null : { id: userId }; } };
       if (name === "@/lib/supabase/server") return { createClient: async () => adapters.db };
       if (name.startsWith("@/")) return moduleAt(path.resolve("src", `${name.slice(2)}.ts`));
       if (name.startsWith(".")) return moduleAt(path.resolve(path.dirname(filename), name.endsWith(".ts") ? name : `${name}.ts`));
@@ -44,6 +44,15 @@ test("search and discovery independently require verified Supabase identity", as
   assert.equal((await searchHandler.GET(search())).status, 401);
   const discovery = load("src/app/api/trips/[tripId]/discover-places/route.ts", { user: null });
   assert.equal((await discovery.POST(post(), { params: Promise.resolve({ tripId }) })).status, 401);
+});
+test("discovery auth-service outages return 503 without provider calls, database access or a false sign-in prompt", async t => {
+  t.mock.method(globalThis, "fetch", () => assert.fail("Discovery must stop before provider access"));
+  const discovery = load("src/app/api/trips/[tripId]/discover-places/route.ts", { authUnavailable: true, onAuth: (writable, options) => {
+    assert.equal(writable, true); assert.equal(options.failOnUnavailable, true);
+  } });
+  const response = await discovery.POST(post(), { params: Promise.resolve({ tripId }) });
+  assert.equal(response.status, 503); assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.equal((await response.json()).error.code, "auth_unavailable");
 });
 test("GET BFF rejects short/oversized, duplicate, foreign-origin and arbitrary parameters", async () => {
   const { GET } = load("src/app/api/destinations/search/route.ts");
@@ -152,6 +161,29 @@ test("discovery preserves local/provider 429 codes, never retries, and allows th
     assert.equal(calls, before + 1, "429 must not be retried automatically");
   }
   assert.deepEqual(timeouts, [60000, 60000]);
+});
+
+test("discovery preserves safe connection failure codes without forwarding private details or retrying", async t => {
+  configure(t); const db = discoveryDatabase(); let code, calls = 0;
+  t.mock.method(globalThis, "fetch", async () => {
+    calls++; return Response.json({ error: { code, message: "PRIVATE connection details" } }, { status: 503 });
+  });
+  const logs = [];
+  t.mock.method(console, "warn", (...args) => logs.push(args));
+  const { POST } = load("src/app/api/trips/[tripId]/discover-places/route.ts", { db });
+  for (const expected of ["PLACES_PROVIDER_CONNECT_TIMEOUT", "PLACES_PROVIDER_CONNECTION_ERROR", "PLACES_PROVIDER_UNAVAILABLE", "PRIVATE_CODE"]) {
+    code = expected; const before = calls;
+    const response = await POST(post(), { params: Promise.resolve({ tripId }) });
+    assert.equal(response.status, 503);
+    const body = await response.json();
+    assert.equal(body.error.code, expected === "PRIVATE_CODE" ? "provider_unavailable" : expected);
+    assert.ok(!JSON.stringify(body).includes("PRIVATE"));
+    assert.equal(calls, before + 1);
+  }
+  const failures = logs.filter(([event]) => event === "[places] discovery_backend_failed");
+  assert.equal(failures.length, 4);
+  assert.deepEqual(JSON.parse(failures[0][1]), { code: "PLACES_PROVIDER_CONNECT_TIMEOUT", status: 503 });
+  assert.ok(!JSON.stringify(logs).includes("PRIVATE"));
 });
 
 for (const status of [200, 429]) test(`overlapping owned-trip discovery shares one backend request and clears in-flight state after ${status}`, async t => {

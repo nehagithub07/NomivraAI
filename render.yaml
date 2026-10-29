@@ -1,0 +1,34 @@
+# This provisions only FastAPI. Import the repository root separately in Vercel.
+services:
+  - type: web
+    name: nomvira-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    numInstances: 1
+    buildCommand: pip install -r requirements.txt
+    startCommand: python check_deployment.py && exec python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: NOMVIRA_INTERNAL_API_KEY
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: OPEN_METEO_GEOCODING_URL
+        value: https://geocoding-api.open-meteo.com/v1
+      - key: OVERPASS_API_URL
+        value: https://overpass.private.coffee/api/interpreter
+      - key: PROVIDER_USER_AGENT
+        value: NomviraAI/0.1
+      - key: ACCOMMODATION_PROVIDER
+        value: stayapi
+      - key: ALLOW_DEMO_ACCOMMODATIONS
+        value: "false"
+      - key: STAYAPI_API_KEY
+        sync: false
+      - key: FOOD_PROVIDER
+        value: geoapify
+      - key: GEOAPIFY_API_KEY
+        sync: false

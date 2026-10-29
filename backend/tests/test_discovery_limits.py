@@ -161,7 +161,9 @@ async def test_cancelled_active_call_releases_slot():
         assert limits.discovery_lock.locked()
 
 
-@pytest.mark.parametrize("failure", ["429", "timeout", "invalid_response"])
+@pytest.mark.parametrize(
+    "failure", ["429", "timeout", "connect_timeout", "connection_error", "invalid_response"]
+)
 async def test_provider_failures_release_slot_and_do_not_retry(failure, caplog):
     caplog.set_level(logging.INFO)
     calls = 0
@@ -172,6 +174,10 @@ async def test_provider_failures_release_slot_and_do_not_retry(failure, caplog):
         if calls == 1:
             if failure == "timeout":
                 raise httpx.ReadTimeout("PRIVATE credential in URL", request=request)
+            if failure == "connect_timeout":
+                raise httpx.ConnectTimeout("PRIVATE credential in URL", request=request)
+            if failure == "connection_error":
+                raise httpx.ConnectError("PRIVATE credential in URL", request=request)
             return (
                 httpx.Response(429, text="PRIVATE provider body")
                 if failure == "429"
@@ -191,11 +197,13 @@ async def test_provider_failures_release_slot_and_do_not_retry(failure, caplog):
         expected = {
             "429": "PLACES_PROVIDER_RATE_LIMITED",
             "timeout": "PLACES_PROVIDER_UNAVAILABLE",
+            "connect_timeout": "PLACES_PROVIDER_CONNECT_TIMEOUT",
+            "connection_error": "PLACES_PROVIDER_CONNECTION_ERROR",
             "invalid_response": "PLACES_PROVIDER_INVALID_RESPONSE",
         }[failure]
         assert response.json()["error"]["code"] == expected
         assert response.status_code == (
-            429 if failure == "429" else 503 if failure == "timeout" else 502
+            429 if failure == "429" else 502 if failure == "invalid_response" else 503
         )
         assert calls == 1 and not app.state.limits.discovery_lock.locked()
         assert (
@@ -204,6 +212,10 @@ async def test_provider_failures_release_slot_and_do_not_retry(failure, caplog):
         assert calls == 2
     assert "PRIVATE" not in caplog.text and KEY not in caplog.text
     assert "discovery_slot_released" in caplog.text
+    if failure == "connect_timeout":
+        assert "places_provider_timeout phase=connect" in caplog.text
+    if failure == "connection_error":
+        assert "places_provider_failure reason=transport type=ConnectError" in caplog.text
 
 
 async def test_route_returns_local_429_without_calling_provider_when_wait_expires():

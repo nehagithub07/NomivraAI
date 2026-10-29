@@ -37,10 +37,18 @@ test("discovery response enforces radius, count, OSM IDs, coordinates and tag al
 
 test("discovery errors explain recovery without showing arbitrary server details", () => {
   assert.match(discoveryErrorMessage("provider_unavailable"), /service is temporarily unavailable/);
+  assert.match(discoveryErrorMessage("PLACES_PROVIDER_UNAVAILABLE"), /service is temporarily unavailable/);
+  for (const code of ["PLACES_PROVIDER_CONNECT_TIMEOUT", "PLACES_PROVIDER_CONNECTION_ERROR"]) {
+    assert.match(discoveryErrorMessage(code), /couldn't connect to the places provider/);
+    assert.match(discoveryErrorMessage(code), /trip is saved/i);
+    assert.doesNotMatch(discoveryErrorMessage(code), /Sign in again/);
+  }
   assert.match(discoveryErrorMessage("provider_rate_limited"), /wait a little/);
   assert.match(discoveryErrorMessage("PLACES_RATE_LIMITED"), /discovery is busy/);
   assert.match(discoveryErrorMessage("PLACES_PROVIDER_RATE_LIMITED"), /provider is temporarily busy/);
   assert.match(discoveryErrorMessage("persistence_unavailable"), /found places but couldn't save/);
   assert.match(discoveryErrorMessage("unauthorized"), /Sign in again/);
+  assert.match(discoveryErrorMessage("auth_unavailable"), /couldn't verify your sign-in/);
+  assert.doesNotMatch(discoveryErrorMessage("auth_unavailable"), /Sign in again/);
   assert.equal(discoveryErrorMessage("PRIVATE PROVIDER DETAILS"), discoveryErrorMessage(undefined));
 });

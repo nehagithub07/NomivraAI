@@ -203,13 +203,17 @@ def test_invalid_geocoding_response(payload):
         assert api.get("/api/v1/destinations/search?q=Tokyo", headers=HEADERS).status_code == 502
 
 
-def test_geocoding_timeout():
+@pytest.mark.parametrize(
+    "error_type", [httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError]
+)
+def test_geocoding_timeout(error_type):
     def handler(request):
-        raise httpx.ReadTimeout("PRIVATE", request=request)
+        raise error_type("PRIVATE", request=request)
 
     with client(handler) as api:
         response = api.get("/api/v1/destinations/search?q=Tokyo", headers=HEADERS)
         assert response.status_code == 503
+        assert response.json()["error"]["code"] == "GEOCODING_PROVIDER_UNAVAILABLE"
         assert "PRIVATE" not in response.text
 
 

@@ -4,7 +4,7 @@ Authentication is implemented in the **client Next.js app** using real `@supabas
 
 ## Environment
 
-Copy `.env.example` to an ignored `client/.env.local` and fill in:
+Copy `.env.example` to an ignored `.env.local` at the repository root and fill in:
 
 ```dotenv
 NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
@@ -117,3 +117,11 @@ After adding your real configuration, verify:
 - Logout, then refresh/direct `/`, `/trips`, `/settings`, and `/trips/new` access return to login. A different signed-in browser session remains signed in after local-scope logout.
 
 Official references: [Supabase SSR](https://supabase.com/docs/guides/auth/server-side/creating-a-client), [password authentication](https://supabase.com/docs/guides/auth/passwords), [email templates](https://supabase.com/docs/guides/auth/auth-email-templates), [redirect URL configuration](https://supabase.com/docs/guides/auth/redirect-urls), [Google OAuth](https://supabase.com/docs/guides/auth/social-sign-in/auth-google).
+
+## Auth verification during connection failures
+
+Protected API routes distinguish a missing/invalid session (`401 unauthorized`) from an unreachable authentication service (`503 auth_unavailable`). Discovery asks the user to sign in again only for the first case. An outage stops the request before trip/database/provider access and does not grant access from cached or unverified user data.
+
+Server-side Supabase requests use an Undici dispatcher to handle a TLS handshake that stalls on one DNS address. Up to four unique resolved addresses are attempted with a 250 ms stagger and one 15-second DNS/TLS deadline. The first certificate-verified TLS connection is selected; unused sockets are closed before any HTTP request or authentication headers are sent. There are no hardcoded provider IPs, HTTP retries or disabled certificate checks. Plain HTTP local-development endpoints use the standard connector. The dispatcher is scoped to the server Supabase client and session-refresh proxy, with four pooled connections; it does not replace browser fetch or destination-provider requests.
+
+Restart Next.js after installing/changing this server connection setup, then reload the trip. Sign in if the API returns a genuine 401. A successful auth-health probe validates service connectivity and the configured publishable key, not an account's session. `npm run test:auth` includes connection fallback, certificate rejection, deadline cleanup, cookie refresh and outage/session distinction tests. This requires Node 20.18.1 or newer; the current Node runtime is compatible. See [Node's supported fetch dispatcher option](https://nodejs.org/api/globals.html#custom-dispatcher).
