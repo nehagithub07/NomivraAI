@@ -92,6 +92,7 @@ def test_allocation_remainder_never_loses_or_creates_money(total):
         result = summarize_budget(source(budget_total=total, budget_style=style), now=NOW)
         assert sum(a.amount for a in result.allocations) == Decimal(total)
         assert all(a.amount >= 0 for a in result.allocations)
+        assert all((c.percent_used is None) == (c.allocated == 0) for c in result.categories)
 
 
 def test_real_hotel_known_cost_provenance_and_no_invented_food_activity_prices():
@@ -126,6 +127,12 @@ def test_no_selected_hotel_is_unknown_not_a_fabricated_zero_price():
     assert result.hotel.amount is None and result.known_costs == 0
     assert result.remaining_budget == Decimal("3000.00")
     assert any("No current" in warning for warning in result.warnings)
+
+
+def test_real_hotel_price_above_budget_input_limit_still_reports_over_budget():
+    result = summarize_budget(source(hotel=hotel(amount="1000000000.00")), now=NOW)
+    assert result.known_costs == Decimal("1000000000.00")
+    assert result.budget_status == "over_budget"
 
 
 def test_planned_actual_remaining_and_daily_per_person_math():
@@ -184,6 +191,22 @@ def test_marking_plan_actual_replaces_not_adds_cost():
     actual = summarize_budget(source(entries=[after]), now=NOW)
     assert planned.committed_costs == actual.committed_costs == 42
     assert actual.actual_costs == 42 and actual.planned_costs == 0
+
+
+def test_partial_hotel_payment_and_remaining_plan_replace_one_full_quote():
+    result = summarize_budget(
+        source(
+            hotel=hotel(),
+            entries=[
+                entry(category="accommodation", entry_type="actual", amount="200.00"),
+                entry(category="accommodation", entry_type="planned", amount="400.00"),
+            ],
+        ),
+        now=NOW,
+    )
+    assert result.actual_costs == 200 and result.planned_costs == 400
+    assert result.known_costs == 0 and result.committed_costs == 600
+    assert result.remaining_budget == 2400
 
 
 def test_decimal_precision_and_round_down_daily_guidance():

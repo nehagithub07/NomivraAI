@@ -305,3 +305,18 @@ for relaxed/balanced/packed pace. No routing, factual prose from the model, gues
 prices, RAG or agent framework is introduced. Run `pytest`, Ruff and the root
 `npm run test:itineraries`. See [STEP9_REPORT.md](../STEP9_REPORT.md) for the full
 file list, protections, time/cost limits, database design and manual acceptance.
+
+## Smart budget engine
+
+Step 10 adds internal-key-protected `POST /api/v1/budget/summary` and
+`POST /api/v1/budget/entries/validate`. The BFF loads authoritative owned trip,
+expense and expiring hotel quote data; Python performs all Decimal money math.
+Manual expense CRUD stays in the authenticated Supabase BFF with independent RLS
+and database validation. Budget generation never calls Gemini or another provider.
+
+Apply `20261029000700_trip_budget_entries.sql` after the existing migrations, or
+apply the private `npm run db:prepare` output. No additional environment variables
+or packages are required. Run `pytest`, Ruff and the root `npm run test:budget`.
+See [budget engine documentation](../docs/features/budget-engine.md) for allocation
+policies, quote expiry, planned/actual reconciliation, currency guards and manual
+verification, and [the Step 10 report](../docs/history/step-10.md) for the file list.

@@ -146,3 +146,10 @@ values are handled with decimal-safe arithmetic.
 - The itinerary engine may consume validated budget context, but Gemini is never used
   for arithmetic, currency conversion or fabricated expense estimates.
 
+Apply `supabase/migrations/20261029000700_trip_budget_entries.sql` before using
+Budget, or apply the private output of `npm run db:prepare`. Manual accommodation
+entries replace the entire automatic hotel quote; mark existing plans actual
+when paid to avoid duplicate costs. No new environment variables are needed.
+See [budget setup and behavior](docs/features/budget-engine.md) and the
+[Step 10 report](docs/history/step-10.md). Run `npm run test:budget` for focused checks.
+
