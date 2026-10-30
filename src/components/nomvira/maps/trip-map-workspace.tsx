@@ -32,15 +32,18 @@ import type {
 function durationLabel(
   seconds: number,
 ) {
-  const minutes =
-    Math.round(seconds / 60);
+  const minutes = Math.max(
+    1,
+    Math.round(seconds / 60),
+  );
 
   if (minutes < 60) {
     return `${minutes} min`;
   }
 
-  const hours =
-    Math.floor(minutes / 60);
+  const hours = Math.floor(
+    minutes / 60,
+  );
 
   const remaining =
     minutes % 60;
@@ -55,7 +58,9 @@ function distanceLabel(
   meters: number,
 ) {
   if (meters < 1000) {
-    return `${Math.round(meters)} m`;
+    return `${Math.round(
+      meters,
+    )} m`;
   }
 
   return `${(
@@ -95,17 +100,21 @@ export function TripMapWorkspace({
     itinerary?.itinerary.days[0]
       ?.day_number ?? 1;
 
+
   const [
     dayNumber,
     setDayNumber,
   ] = useState(firstDay);
 
+
+  // Driving is currently the safer default.
   const [
     mode,
     setMode,
   ] = useState<RoutingMode>(
-    "walking",
+    "driving",
   );
+
 
   const [
     route,
@@ -115,14 +124,22 @@ export function TripMapWorkspace({
       null,
     );
 
+
   const [
     loading,
     setLoading,
   ] = useState(false);
 
+
   const [
     error,
     setError,
+  ] = useState("");
+
+
+  const [
+    errorCode,
+    setErrorCode,
   ] = useState("");
 
 
@@ -134,74 +151,180 @@ export function TripMapWorkspace({
     );
 
 
+  /*
+   * Persisted discovered attractions are authoritative.
+   *
+   * This also lets older itinerary items recover coordinates
+   * from the persisted attraction candidate when their
+   * itinerary snapshot has null coordinates.
+   */
+  const discoveredPlaceMap =
+    useMemo(
+      () =>
+        new Map(
+          discoveredPlaces.map(
+            (place) => [
+              place.id,
+              place,
+            ],
+          ),
+        ),
+
+      [discoveredPlaces],
+    );
+
+
   const itineraryPoints =
     useMemo<TripMapPoint[]>(
-      () =>
-        (day?.items ?? [])
-          .filter(
-            (item) =>
-              item.latitude !==
-                null &&
-              item.longitude !==
-                null,
-          )
-          .map(
-            (item, index) => ({
-              id:
-                item.candidate_id ??
-                `${dayNumber}-${index}`,
+      () => {
+        if (!day) {
+          return [];
+        }
 
-              name: item.title,
+        return day.items.flatMap(
+          (item, index) => {
+            let latitude =
+              item.latitude;
 
-              latitude:
-                item.latitude!,
+            let longitude =
+              item.longitude;
 
-              longitude:
-                item.longitude!,
 
-              kind:
-                "itinerary",
+            /*
+             * Attraction candidate IDs are OpenStreetMap
+             * provider IDs, so we can safely backfill them
+             * from persisted discovered places.
+             */
+            if (
+              (
+                latitude === null ||
+                longitude === null
+              ) &&
+              item.candidate_type ===
+                "attraction" &&
+              item.candidate_id
+            ) {
+              const persisted =
+                discoveredPlaceMap.get(
+                  item.candidate_id,
+                );
 
-              order:
-                index + 1,
-            }),
-          ),
+              if (persisted) {
+                latitude =
+                  persisted.latitude;
+
+                longitude =
+                  persisted.longitude;
+              }
+            }
+
+
+            if (
+              latitude === null ||
+              longitude === null
+            ) {
+              return [];
+            }
+
+
+            return [
+              {
+                id:
+                  item.candidate_id ??
+                  `${dayNumber}-${index}`,
+
+                name: item.title,
+
+                latitude,
+                longitude,
+
+                kind:
+                  "itinerary" as const,
+
+                order:
+                  index + 1,
+              },
+            ];
+          },
+        );
+      },
 
       [
         day,
         dayNumber,
+        discoveredPlaceMap,
       ],
+    );
+
+
+  /*
+   * Avoid drawing a normal discovered-place marker directly
+   * underneath an itinerary-number marker for the same POI.
+   */
+  const itineraryIds =
+    useMemo(
+      () =>
+        new Set(
+          itineraryPoints.map(
+            (point) => point.id,
+          ),
+        ),
+
+      [itineraryPoints],
     );
 
 
   const points =
     useMemo<TripMapPoint[]>(
       () => [
-        ...discoveredPlaces.map(
-          (place) => ({
-            ...place,
-            kind:
-              "discovered" as const,
-          }),
-        ),
+        ...discoveredPlaces
+          .filter(
+            (place) =>
+              !itineraryIds.has(
+                place.id,
+              ),
+          )
+          .map(
+            (place) => ({
+              ...place,
+
+              kind:
+                "discovered" as const,
+            }),
+          ),
 
         ...itineraryPoints,
       ],
 
       [
         discoveredPlaces,
+        itineraryIds,
         itineraryPoints,
       ],
     );
+
+
+  const canCalculateRoute =
+    itineraryPoints.length >= 2;
 
 
   async function loadRoute(
     nextMode = mode,
     nextDay = dayNumber,
   ) {
+    if (
+      loading ||
+      itineraryPoints.length < 2
+    ) {
+      return;
+    }
+
+
     setLoading(true);
     setError("");
+    setErrorCode("");
     setRoute(null);
+
 
     try {
       const params =
@@ -209,49 +332,120 @@ export function TripMapWorkspace({
           day_number:
             String(nextDay),
 
-          mode: nextMode,
+          mode:
+            nextMode,
         });
+
 
       const response =
         await fetch(
-          `/api/trips/${tripId}/routing?${params}`,
+          `/api/trips/${tripId}/routing?${params.toString()}`,
           {
+            method: "GET",
             cache: "no-store",
           },
         );
 
+
       const body =
         await response
           .json()
-          .catch(() => null);
+          .catch(
+            () => null,
+          );
+
 
       if (!response.ok) {
+        const code =
+          typeof body?.error
+            ?.code === "string"
+            ? body.error.code
+            : "ROUTING_FAILED";
+
+
+        const message =
+          typeof body?.error
+            ?.message === "string"
+            ? body.error.message
+            : "Route information is temporarily unavailable.";
+
+
+        console.error(
+          "[routing] route_failed",
+          {
+            status:
+              response.status,
+
+            code,
+            message,
+
+            tripId,
+            dayNumber:
+              nextDay,
+
+            mode:
+              nextMode,
+
+            routableStops:
+              itineraryPoints.length,
+          },
+        );
+
+
+        setErrorCode(
+          code,
+        );
+
         setError(
-          body?.error?.message ??
-            "Route information is unavailable.",
+          message,
         );
 
         return;
       }
+
 
       const parsed =
         routeResponseSchema.safeParse(
           body,
         );
 
+
       if (!parsed.success) {
+        console.error(
+          "[routing] invalid_response",
+          parsed.error.flatten(),
+        );
+
+
+        setErrorCode(
+          "ROUTING_INVALID_RESPONSE",
+        );
+
         setError(
-          "Route information is unavailable.",
+          "The routing service returned an invalid response.",
         );
 
         return;
       }
 
-      setRoute(parsed.data);
 
-    } catch {
+      setRoute(
+        parsed.data,
+      );
+
+    } catch (cause) {
+      console.error(
+        "[routing] request_exception",
+        cause,
+      );
+
+
+      setErrorCode(
+        "ROUTING_NETWORK_ERROR",
+      );
+
       setError(
-        "Route information is unavailable.",
+        "Route information is temporarily unavailable.",
       );
 
     } finally {
@@ -263,18 +457,26 @@ export function TripMapWorkspace({
   function chooseDay(
     value: number,
   ) {
-    setDayNumber(value);
+    setDayNumber(
+      value,
+    );
+
     setRoute(null);
     setError("");
+    setErrorCode("");
   }
 
 
   function chooseMode(
     value: RoutingMode,
   ) {
-    setMode(value);
+    setMode(
+      value,
+    );
+
     setRoute(null);
     setError("");
+    setErrorCode("");
   }
 
 
@@ -295,6 +497,7 @@ export function TripMapWorkspace({
             </p>
           </div>
 
+
           <div className="flex flex-wrap gap-2">
             <Button
               variant={
@@ -303,6 +506,7 @@ export function TripMapWorkspace({
                   : "secondary"
               }
               size="sm"
+              disabled={loading}
               onClick={() =>
                 chooseMode(
                   "walking",
@@ -312,6 +516,7 @@ export function TripMapWorkspace({
               Walking
             </Button>
 
+
             <Button
               variant={
                 mode === "driving"
@@ -319,6 +524,7 @@ export function TripMapWorkspace({
                   : "secondary"
               }
               size="sm"
+              disabled={loading}
               onClick={() =>
                 chooseMode(
                   "driving",
@@ -329,6 +535,7 @@ export function TripMapWorkspace({
             </Button>
           </div>
         </div>
+
 
         {itinerary && (
           <div className="mt-5 flex flex-wrap gap-2">
@@ -345,6 +552,7 @@ export function TripMapWorkspace({
                       ? "default"
                       : "secondary"
                   }
+                  disabled={loading}
                   onClick={() =>
                     chooseDay(
                       item.day_number,
@@ -359,57 +567,119 @@ export function TripMapWorkspace({
           </div>
         )}
 
-        <div className="mt-5">
-          <Button
-            onClick={() =>
-              loadRoute()
-            }
-            loading={loading}
-            disabled={
-              itineraryPoints.length <
-              2
-            }
-          >
-            Calculate real route
-          </Button>
+
+        <div className="mt-5 rounded-xl border p-4">
+          <p className="type-small font-medium">
+            Day {dayNumber}
+          </p>
+
+          <p className="type-meta mt-1 text-muted-foreground">
+            {
+              itineraryPoints.length
+            }{" "}
+            mapped{" "}
+            {itineraryPoints.length ===
+            1
+              ? "stop"
+              : "stops"}{" "}
+            available for routing
+          </p>
+
+
+          {!canCalculateRoute && (
+            <p className="type-meta mt-2 text-amber-700">
+              At least 2 mapped itinerary stops are required to calculate a route.
+            </p>
+          )}
+
+
+          <div className="mt-4">
+            <Button
+              onClick={() =>
+                loadRoute()
+              }
+              loading={
+                loading
+              }
+              disabled={
+                loading ||
+                !canCalculateRoute
+              }
+            >
+              {canCalculateRoute
+                ? "Calculate real route"
+                : "Need 2 mapped stops"}
+            </Button>
+          </div>
         </div>
 
+
         {error && (
-          <p
+          <div
             role="alert"
-            className="type-small mt-4 text-destructive"
+            className="mt-4 rounded-xl border border-destructive/20 p-4"
           >
-            {error}
-          </p>
+            <p className="type-small text-destructive">
+              {error}
+            </p>
+
+
+            {process.env
+              .NODE_ENV ===
+              "development" &&
+              errorCode && (
+                <p className="mt-2 font-mono text-xs text-muted-foreground">
+                  {errorCode}
+                </p>
+              )}
+          </div>
         )}
       </SurfaceCard>
+
 
       <TripMap
         points={points}
         route={route}
         center={center}
-        styleUrl={mapStyleUrl}
+        styleUrl={
+          mapStyleUrl
+        }
       />
+
 
       {route && (
         <SurfaceCard className="p-5">
-          <h3 className="type-small font-semibold">
-            Day {dayNumber} route
-          </h3>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 className="type-small font-semibold">
+                Day{" "}
+                {dayNumber} route
+              </h3>
 
-          <p className="type-small mt-2 text-muted-foreground">
-            {durationLabel(
-              route.total_duration_seconds,
+              <p className="type-small mt-2 text-muted-foreground">
+                {durationLabel(
+                  route.total_duration_seconds,
+                )}
+                {" · "}
+                {distanceLabel(
+                  route.total_distance_meters,
+                )}
+                {" · "}
+                {route.mode ===
+                "walking"
+                  ? "Walking"
+                  : "Driving"}
+              </p>
+            </div>
+
+
+            {route.cached && (
+              <span className="type-meta rounded-full border px-3 py-1 text-muted-foreground">
+                Cached
+              </span>
             )}
-            {" · "}
-            {distanceLabel(
-              route.total_distance_meters,
-            )}
-            {" · "}
-            {mode === "walking"
-              ? "Walking"
-              : "Driving"}
-          </p>
+          </div>
+
 
           <div className="mt-5 space-y-4">
             {route.segments.map(
@@ -418,20 +688,23 @@ export function TripMapWorkspace({
                 index,
               ) => (
                 <div
-                  key={index}
+                  key={`${segment.from_index}-${segment.to_index}-${index}`}
                   className="rounded-xl border p-4"
                 >
                   <p className="type-small font-medium">
                     {segment.from_label ??
                       `Stop ${
-                        index + 1
+                        index +
+                        1
                       }`}
                     {" → "}
                     {segment.to_label ??
                       `Stop ${
-                        index + 2
+                        index +
+                        2
                       }`}
                   </p>
+
 
                   <p className="type-meta mt-1 text-muted-foreground">
                     {durationLabel(
@@ -442,6 +715,7 @@ export function TripMapWorkspace({
                       segment.distance_meters,
                     )}
                   </p>
+
 
                   {segment.warning ===
                     "long_transfer" && (
@@ -454,8 +728,9 @@ export function TripMapWorkspace({
             )}
           </div>
 
+
           <p className="type-meta mt-5 text-muted-foreground">
-            Route distance and travel time provided by openrouteservice using OpenStreetMap routing data. Times are planning estimates, not live traffic.
+            Route distance and travel time are provided by openrouteservice using OpenStreetMap routing data. Times are planning estimates and do not include live traffic.
           </p>
         </SurfaceCard>
       )}

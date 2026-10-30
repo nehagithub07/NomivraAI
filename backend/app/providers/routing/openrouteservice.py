@@ -2,7 +2,7 @@ import math
 
 import httpx
 from pydantic import ValidationError
-
+import logging
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.providers.routing.base import RoutingProvider
@@ -15,6 +15,7 @@ from app.schemas.routing import (
     RouteSegment,
 )
 
+logger = logging.getLogger("nomvira.routing")
 
 PROFILE_MAP = {
     "walking": "foot-walking",
@@ -81,6 +82,21 @@ class OpenRouteServiceProvider(RoutingProvider):
                 ),
             )
 
+            if response.status_code >= 400:
+                 try:
+                     provider_error = response.json()
+                 except ValueError:
+                     provider_error = {
+                         "message": response.text[:300]
+                     }
+             
+                 logger.warning(
+                     "routing_provider_failed path=%s status=%s response=%s",
+                     path,
+                     response.status_code,
+                     provider_error,
+                 )
+        
         except httpx.TimeoutException:
             raise AppError(
                 "ROUTING_PROVIDER_TIMEOUT",

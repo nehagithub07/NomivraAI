@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import "./globals.css";
 import "maplibre-gl/dist/maplibre-gl.css";
+
 export const metadata: Metadata = {
   title: {
     default: "NomviraAI",

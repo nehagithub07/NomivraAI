@@ -32,6 +32,9 @@ def deployment_errors(settings: Settings) -> list[str]:
         errors.append("Use FOOD_PROVIDER=geoapify in production.")
     if settings.llm_provider != "gemini":
         errors.append("Use LLM_PROVIDER=gemini in production.")
+    if settings.routing_provider != "openrouteservice":
+         errors.append("Use ROUTING_PROVIDER=openrouteservice in production."
+    )
     for name in (
         "frontend_origin",
         "open_meteo_geocoding_url",

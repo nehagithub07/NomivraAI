@@ -14,13 +14,22 @@ out/
 dist/
 build/
 .turbo/
+.cache/
+.parcel-cache/
+
 *.tsbuildinfo
+next-env.d.ts.bak
 
 # Package manager logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# Keep lock files tracked:
+# package-lock.json
+# pnpm-lock.yaml
+# yarn.lock
 
 
 # ---------------------------------------------------------
@@ -34,6 +43,11 @@ test-results/
 blob-report/
 htmlcov/
 
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+
 # Local QA / generated verification files
 .qa/
 
@@ -42,19 +56,51 @@ htmlcov/
 # Environment variables / Secrets
 # ---------------------------------------------------------
 
+# Ignore every environment file by default
 .env
-.env.local
-.env.development
-.env.development.local
-.env.test
-.env.test.local
-.env.production
-.env.production.local
 .env.*
+*.env
 
-# Keep safe templates
+# Backend environment files
+backend/.env
+backend/.env.*
+backend/*.env
+
+# Keep ONLY safe templates
 !.env.example
 !backend/.env.example
+
+# Local secret/config files
+*.secret
+*.secrets
+secrets/
+.secret/
+.secret.*
+
+credentials.json
+credentials.local.json
+credentials.*.json
+
+service-account.json
+service_account.json
+service-account-*.json
+service_account_*.json
+
+# Private keys / certificates
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+
+# Local certificates
+certs/
+certificates/
 
 
 # ---------------------------------------------------------
@@ -69,22 +115,42 @@ __pycache__/
 venv/
 env/
 ENV/
+
 backend/.venv/
+backend/venv/
+backend/env/
 
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
 .pyright/
 .pyre/
-
-.coverage
-.coverage.*
+.hypothesis/
+.tox/
+.nox/
 
 *.egg
 *.egg-info/
 .eggs/
 
 pip-wheel-metadata/
+
+.python-version
+
+
+# ---------------------------------------------------------
+# Python build artifacts
+# ---------------------------------------------------------
+
+*.so
+*.whl
+
+develop-eggs/
+downloads/
+wheels/
+share/python-wheels/
+
+MANIFEST
 
 
 # ---------------------------------------------------------
@@ -98,6 +164,9 @@ pip-wheel-metadata/
 *.db-shm
 *.db-wal
 
+database.local.*
+local.db
+
 
 # ---------------------------------------------------------
 # Supabase local state
@@ -106,12 +175,28 @@ pip-wheel-metadata/
 supabase/.temp/
 supabase/.branches/
 
+# Local Supabase CLI state
+.supabase/
+
+# IMPORTANT:
+# DO NOT ignore:
+# supabase/migrations/
+# supabase/config.toml
+
 
 # ---------------------------------------------------------
-# Deployment platforms
+# Vercel / Render / Deployment local files
 # ---------------------------------------------------------
 
 .vercel/
+
+# Local deployment output
+.netlify/
+.serverless/
+
+# Local deployment/debug files
+render.local.*
+vercel.local.*
 
 
 # ---------------------------------------------------------
@@ -121,58 +206,215 @@ supabase/.branches/
 *.log
 logs/
 
+backend/logs/
+
+debug.log
+error.log
+access.log
+
+*.log.*
+
+
+# ---------------------------------------------------------
+# Runtime files
+# ---------------------------------------------------------
+
+*.pid
+*.pid.lock
+*.seed
+
+pids/
+
 
 # ---------------------------------------------------------
 # Temporary files / caches
 # ---------------------------------------------------------
 
-.cache/
 tmp/
 temp/
+.tmp/
+.temp/
+
 *.tmp
 *.temp
+*.cache
+
+.cache-loader/
+
+
+# ---------------------------------------------------------
+# Generated / local exports
+# ---------------------------------------------------------
+
+exports/
+generated/
+generated-files/
+
+downloads/
+
+# Local reports generated during development
+reports/local/
+reports/generated/
+
+
+# ---------------------------------------------------------
+# Local project archives / backups
+# ---------------------------------------------------------
+
+*.zip
+*.7z
+*.rar
+*.tar
+*.tar.gz
+*.tgz
+
+# Project backup folders
+backup/
+backups/
+
+*.bak
+*.backup
+*.old
+*.orig
+*.save
+
+
+# ---------------------------------------------------------
+# Local uploads / scratch files
+# ---------------------------------------------------------
+
+uploads/
+local-uploads/
+
+scratch/
+sandbox/
+
+# Do not use these directories for production-managed assets.
 
 
 # ---------------------------------------------------------
 # OS generated files
 # ---------------------------------------------------------
 
+# macOS
 .DS_Store
 .DS_Store?
 ._*
 .Spotlight-V100
 .Trashes
+.fseventsd/
 
+# Windows
 Thumbs.db
 Thumbs.db:encryptable
 Desktop.ini
+ehthumbs.db
+ehthumbs_vista.db
+
+# Windows recycle/system
+$RECYCLE.BIN/
 
 
 # ---------------------------------------------------------
 # IDE / Editor
 # ---------------------------------------------------------
 
+# JetBrains
 .idea/
 *.iml
+
+# VS Code local settings
+.vscode/
+
+# Visual Studio
+.vs/
+
+# Vim
 *.swp
 *.swo
 *~
 
-# VS Code:
-# Ignore personal workspace settings.
-.vscode/
+# Sublime
+*.sublime-workspace
 
-# If you later want shared team settings, replace the line
-# above with:
-#
-# .vscode/*
-# !.vscode/settings.json
-# !.vscode/extensions.json
+# Eclipse
+.project
+.classpath
+.settings/
 
 
 # ---------------------------------------------------------
-# Misc
+# TypeScript / ESLint caches
 # ---------------------------------------------------------
 
-*.bak
-*.orig
+.eslintcache
+.stylelintcache
+
+
+# ---------------------------------------------------------
+# Next.js / React local files
+# ---------------------------------------------------------
+
+.next/
+.vercel/
+
+# Storybook output if added later
+storybook-static/
+
+
+# ---------------------------------------------------------
+# Local AI / coding assistant metadata
+# ---------------------------------------------------------
+
+.codex/
+.cursor/
+.cursor-cache/
+.claude/
+
+# Local Copilot workspace data if generated
+.github/copilot-local/
+
+
+# ---------------------------------------------------------
+# Local shell / terminal history
+# ---------------------------------------------------------
+
+.bash_history
+.zsh_history
+.python_history
+.node_repl_history
+
+
+# ---------------------------------------------------------
+# Miscellaneous
+# ---------------------------------------------------------
+
+*.stackdump
+
+.DS_Store
+
+# Local notes that should never be committed
+notes.local.*
+todo.local.*
+debug.local.*
+
+
+# =========================================================
+# IMPORTANT FILES THAT SHOULD REMAIN TRACKED
+# =========================================================
+
+# .env.example
+# backend/.env.example
+# package.json
+# package-lock.json
+# requirements.txt
+# render.yaml
+# vercel.json
+# README.md
+# LICENSE
+# SECURITY.md
+# CONTRIBUTING.md
+# supabase/migrations/**
+# src/**
+# backend/app/**
+# docs/**

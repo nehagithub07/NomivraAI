@@ -85,9 +85,9 @@ export function ItineraryWorkspace({ tripId, initialItinerary, versions: initial
         <div className="mb-6 flex items-start gap-3"><CalendarDays className="mt-1 size-5 text-muted-foreground" aria-hidden="true" /><div><h2 className="type-section">Day {day.day_number} — {day.theme}</h2><p className="type-small mt-1 text-muted-foreground">{dateLabel(day.date)}</p></div></div>
         <div className="mb-5"><WeatherDaySummary day={weather?.forecast.days.find(d => d.date === day.date)} availability={weather?.forecast.availability} /></div>
         <DayRouteSummary
-  tripId={tripId}
-  dayNumber={day.day_number}
-/>
+           tripId={tripId}
+           dayNumber={day.day_number}
+        />
         <ol className="space-y-5 border-l pl-5 sm:pl-7">{day.items.map((item, i) => {
           const Icon = item.candidate_type === "food" ? Utensils : item.candidate_type === "hotel" ? BedDouble : MapPin;
           return <li key={`${i}-${item.candidate_id}`} className="relative rounded-2xl border bg-background p-4 sm:p-5">
