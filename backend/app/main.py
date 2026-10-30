@@ -17,7 +17,11 @@ from app.services.hotel_recommendation_service import HotelRecommendationService
 from app.services.itinerary_generation_service import ItineraryGenerationService
 from app.services.weather_adaptation_service import WeatherAdaptationService
 from app.services.weather_service import WeatherService
+from app.providers.routing.openrouteservice import (
+    OpenRouteServiceProvider,
+)
 
+from app.services.routing_service import RoutingService
 
 def create_app(
     settings: Settings | None = None, transport: httpx.AsyncBaseTransport | None = None
@@ -46,6 +50,18 @@ def create_app(
             )
             app.state.weather_adaptation = WeatherAdaptationService(
                 app.state.weather, app.state.itineraries
+            )
+            app.state.routing = RoutingService(
+                OpenRouteServiceProvider(
+                    app.state.settings,
+                    client,
+                ),
+                ttl_seconds=(
+                    app.state.settings.routing_cache_ttl_seconds
+                ),
+                max_entries=(
+                    app.state.settings.routing_cache_max_entries
+                ),
             )
             yield
 

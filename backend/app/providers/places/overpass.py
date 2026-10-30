@@ -14,6 +14,10 @@ from app.schemas.place import PlaceCandidate, PlaceCategory
 
 logger = logging.getLogger("nomvira.overpass")
 
+LOCAL_RADIUS_METERS = 7000
+CITY_RADIUS_METERS = 30000
+MAX_RESULTS = 30
+MAX_NOTABLE_RESULTS = 15
 
 USEFUL_TAGS = {
     "tourism",
@@ -32,8 +36,10 @@ TOURISM_CATEGORIES: dict[str, PlaceCategory] = {
     "attraction": "attraction",
     "viewpoint": "viewpoint",
     "gallery": "gallery",
+    "theme_park": "attraction",
+    "zoo": "attraction",
+    "aquarium": "attraction",
 }
-
 
 def haversine_km(
     lat1: float,
@@ -90,7 +96,10 @@ def bounding_box(
     using Haversine distance.
     """
 
-    radius_meters = min(radius_meters, 5000)
+    radius_meters = min(
+      radius_meters,
+      CITY_RADIUS_METERS,
+    ) 
 
     lat_delta = radius_meters / 111_320
 
@@ -116,42 +125,81 @@ def build_query(
     radius: int,
     limit: int,
 ) -> str:
-    # Keep public Overpass requests intentionally small.
-    radius = min(radius, 5000)
-
-    # Retrieve a little more than the UI needs because normalization,
-    # radius filtering and deduplication may remove candidates.
-    count = min(
-        50,
-        max(20, limit * 3),
+    city_radius = min(
+        radius,
+        CITY_RADIUS_METERS,
     )
 
-    south, west, north, east = bounding_box(
+    local_radius = min(
+        city_radius,
+        LOCAL_RADIUS_METERS,
+    )
+
+    local_south, local_west, local_north, local_east = bounding_box(
         latitude,
         longitude,
-        radius,
+        local_radius,
     )
 
-    bbox = f"({south:.6f},{west:.6f},{north:.6f},{east:.6f})"
+    city_south, city_west, city_north, city_east = bounding_box(
+        latitude,
+        longitude,
+        city_radius,
+    )
+
+    local_bbox = (
+        f"({local_south:.6f},{local_west:.6f},"
+        f"{local_north:.6f},{local_east:.6f})"
+    )
+
+    city_bbox = (
+        f"({city_south:.6f},{city_west:.6f},"
+        f"{city_north:.6f},{city_east:.6f})"
+    )
+
+    count = min(
+        120,
+        max(60, limit * 4),
+    )
 
     return (
         "[out:json]"
-        "[timeout:25]"
+        "[timeout:30]"
         "[maxsize:33554432];"
         "("
-        f'nwr["tourism"~"^(attraction|museum|viewpoint|gallery)$"]'
-        f'["name"]{bbox};'
+
+        # Normal nearby tourism discovery.
+        f'nwr["tourism"~"^(attraction|museum|viewpoint|gallery|theme_park|zoo|aquarium)$"]'
+        f'["name"]{local_bbox};'
+
         f'nwr["historic"~"^(monument|memorial|castle|ruins|archaeological_site)$"]'
-        f'["name"]{bbox};'
+        f'["name"]{local_bbox};'
+
         f'nwr["leisure"="park"]'
-        f'["name"]{bbox};'
+        f'["name"]{local_bbox};'
+
         f'nwr["amenity"="arts_centre"]'
-        f'["name"]{bbox};'
+        f'["name"]{local_bbox};'
+
+        # Important attractions across the wider city.
+        f'nwr["tourism"~"^(theme_park|zoo|aquarium)$"]'
+        f'["name"]{city_bbox};'
+
+        f'nwr["tourism"~"^(attraction|museum|viewpoint|gallery)$"]'
+        f'["name"]["wikidata"]{city_bbox};'
+
+        f'nwr["tourism"~"^(attraction|museum|viewpoint|gallery)$"]'
+        f'["name"]["wikipedia"]{city_bbox};'
+
+        f'nwr["historic"~"^(monument|memorial|castle|ruins|archaeological_site)$"]'
+        f'["name"]["wikidata"]{city_bbox};'
+
+        f'nwr["historic"~"^(monument|memorial|castle|ruins|archaeological_site)$"]'
+        f'["name"]["wikipedia"]{city_bbox};'
+
         ");"
         f"out center qt {count};"
     )
-
-
 def normalize_elements(
     data: dict[str, Any],
     latitude: float,
@@ -239,6 +287,14 @@ def normalize_elements(
     sorted_places = sorted(
         places.values(),
         key=lambda item: (
+            0
+            if (
+                item.tags.get("wikidata")
+                or item.tags.get("wikipedia")
+                or item.tags.get("tourism")
+                in {"theme_park", "zoo", "aquarium"}
+            )
+            else 1,
             item.distance_km,
             item.provider_place_id,
         ),
@@ -288,12 +344,12 @@ class OpenStreetMapOverpassProvider(PlacesProvider):
         # Protect the shared public Overpass infrastructure.
         effective_radius = min(
             radius_meters,
-            5000,
+            CITY_RADIUS_METERS,
         )
 
         effective_limit = min(
             limit,
-            20,
+            MAX_RESULTS,
         )
 
         started = time.monotonic()

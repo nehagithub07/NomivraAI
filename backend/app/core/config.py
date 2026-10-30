@@ -16,8 +16,8 @@ class Settings(BaseSettings):
     open_meteo_geocoding_url: AnyHttpUrl = AnyHttpUrl("https://geocoding-api.open-meteo.com/v1")
     overpass_api_url: AnyHttpUrl = AnyHttpUrl("https://overpass-api.de/api/interpreter")
     provider_user_agent: str = Field(default="NomviraAI/0.1", min_length=5, max_length=200)
-    default_poi_radius_meters: int = Field(default=10000, ge=100, le=20000)
-    max_poi_radius_meters: int = Field(default=20000, ge=100, le=20000)
+    default_poi_radius_meters: int = Field(default=30000, ge=100, le=30000)
+    max_poi_radius_meters: int = Field(default=30000, ge=100, le=30000)
     app_env: Literal["development", "test", "production"] = "production"
     accommodation_provider: Literal["stayapi", "fixture"] = "stayapi"
     allow_demo_accommodations: bool = False
@@ -39,7 +39,25 @@ class Settings(BaseSettings):
     )
     weather_provider: Literal["open_meteo"] = "open_meteo"
     open_meteo_forecast_url: AnyHttpUrl = AnyHttpUrl("https://api.open-meteo.com/v1")
+    routing_provider: Literal["openrouteservice"] = "openrouteservice"
 
+    openrouteservice_api_key: SecretStr = SecretStr("")
+    
+    openrouteservice_base_url: AnyHttpUrl = AnyHttpUrl(
+        "https://api.heigit.org/openrouteservice/v2"
+    )
+    
+    routing_cache_ttl_seconds: int = Field(
+        default=21600,
+        ge=60,
+        le=86400,
+    )
+    
+    routing_cache_max_entries: int = Field(
+        default=256,
+        ge=1,
+        le=1024,
+    )
     @model_validator(mode="after")
     def valid_radius(self):
         if (
@@ -60,7 +78,18 @@ class Settings(BaseSettings):
             or self.geoapify_base_url.password
         ):
             raise ValueError("Geoapify requires HTTPS without embedded credentials")
+        if (
+            self.openrouteservice_base_url.scheme != "https"
+            or self.openrouteservice_base_url.username
+            or self.openrouteservice_base_url.password
+            or self.openrouteservice_base_url.query
+            or self.openrouteservice_base_url.fragment
+        ):    
+            raise ValueError(
+                "openrouteservice requires HTTPS without credentials"
+            )
         return self
+        
 
 
 @lru_cache

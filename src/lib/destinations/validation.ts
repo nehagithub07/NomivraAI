@@ -27,7 +27,7 @@ export const normalizedPlaceSchema = coordinatesSchema.extend({
   distance_km: z.number().nonnegative().max(40080),
   tags: z.partialRecord(z.enum(tagNames), z.string().max(500)),
 });
-export const discoveryResponseSchema = coordinatesSchema.extend({ radius_meters: z.number().int().min(100).max(20000), places: z.array(normalizedPlaceSchema).max(30) });
+export const discoveryResponseSchema = coordinatesSchema.extend({ radius_meters: z.number().int().min(100).max(30000), places: z.array(normalizedPlaceSchema).max(30) });
 export type DestinationSuggestion = z.infer<typeof signedDestinationSchema>;
 export type ResolvedDestination = z.infer<typeof resolvedDestinationSchema>;
 export type NormalizedPlace = z.infer<typeof normalizedPlaceSchema>;

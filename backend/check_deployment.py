@@ -16,6 +16,7 @@ def deployment_errors(settings: Settings) -> list[str]:
         "stayapi_api_key",
         "geoapify_api_key",
         "gemini_api_key",
+        "openrouteservice_api_key",
     ):
         value = getattr(settings, name).get_secret_value()
         minimum = 32 if name == "nomvira_internal_api_key" else 1

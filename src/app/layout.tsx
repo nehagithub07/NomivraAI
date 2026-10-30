@@ -1,24 +1,26 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import { GeistSans } from "geist/font/sans";
 import "./globals.css";
-
-const geist = Geist({
-  subsets: ["latin"],
-  variable: "--font-geist-sans",
-  display: "swap",
-});
-
+import "maplibre-gl/dist/maplibre-gl.css";
 export const metadata: Metadata = {
-  title: { default: "NomviraAI", template: "%s · NomviraAI" },
+  title: {
+    default: "NomviraAI",
+    template: "%s · NomviraAI",
+  },
   description:
     "The visual foundation for NomviraAI, your intelligent travel companion.",
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{ children: React.ReactNode }>) {
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
-    <html lang="en" className={geist.variable}>
+    <html
+      lang="en"
+      className={GeistSans.variable}
+    >
       <body>{children}</body>
     </html>
   );

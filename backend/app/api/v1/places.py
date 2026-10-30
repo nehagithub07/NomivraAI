@@ -21,7 +21,11 @@ async def discover(request: Request, body: PlaceDiscoveryRequest) -> PlaceDiscov
     # Match the lighter Overpass adapter's radius cap in the response as well.
     body = body.model_copy(
         update={
-            "radius_meters": min(body.radius_meters or settings.default_poi_radius_meters, 5000),
+            "radius_meters": min(
+                body.radius_meters
+                or settings.default_poi_radius_meters,
+                settings.max_poi_radius_meters,
+            ),
         }
     )
     async with request.app.state.limits.discovery():

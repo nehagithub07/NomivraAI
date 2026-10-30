@@ -11,9 +11,18 @@ PlaceCategory = Literal[
 
 class PlaceDiscoveryRequest(Coordinates):
     model_config = ConfigDict(extra="forbid")
-    radius_meters: int | None = Field(default=None, ge=100, le=20000)
-    limit: int = Field(default=20, ge=1, le=30)
 
+    radius_meters: int | None = Field(
+        default=None,
+        ge=100,
+        le=30000,
+    )
+
+    limit: int = Field(
+        default=30,
+        ge=1,
+        le=30,
+    )
 
 class PlaceCandidate(Coordinates):
     provider: Literal["openstreetmap"] = "openstreetmap"
