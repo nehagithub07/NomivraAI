@@ -235,6 +235,8 @@ class HotelRecommendationService:
             )
         key = request.inventory_key(mode)
         cached = self.cache.peek(key)
+        if request.cache_only and cached is None:
+            raise AppError("ACCOMMODATION_CACHE_MISS", "No current hotel recommendations.", 404)
         if request.refresh:
             now = time.monotonic()
             # Expired keys are removed too, keeping refresh metadata bounded.

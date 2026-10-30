@@ -8,11 +8,24 @@ from app.schemas.itinerary import Interest, PlanningInput, StrictModel
 
 Text = Annotated[str, Field(min_length=1, max_length=2000, pattern=r"^[^\x00]+$")]
 ToolName = Literal[
-    "get_trip_overview", "get_itinerary", "get_weather", "get_budget_summary",
-    "get_selected_hotel", "get_saved_food", "get_discovered_places", "get_trip_preferences",
-    "find_trip_places", "find_food_options", "find_hotel_options", "add_budget_entry",
-    "move_itinerary_activity", "replace_itinerary_activity", "create_itinerary_version",
-    "adapt_itinerary_for_weather", "select_hotel", "save_food_selection",
+    "get_trip_overview",
+    "get_itinerary",
+    "get_weather",
+    "get_budget_summary",
+    "get_selected_hotel",
+    "get_saved_food",
+    "get_discovered_places",
+    "get_trip_preferences",
+    "find_trip_places",
+    "find_food_options",
+    "find_hotel_options",
+    "add_budget_entry",
+    "move_itinerary_activity",
+    "replace_itinerary_activity",
+    "create_itinerary_version",
+    "adapt_itinerary_for_weather",
+    "select_hotel",
+    "save_food_selection",
 ]
 
 
@@ -34,6 +47,9 @@ class CompanionContext(StrictModel):
     saved_food_count: int = Field(ge=0)
     discovered_place_count: int = Field(ge=0)
     reference_date: date | None = None
+    budget_summary: dict | None = None
+    weather_availability: str = "not_loaded"
+    selected_hotel_name: str | None = Field(default=None, max_length=300)
 
 
 class ChatHistoryMessage(StrictModel):
@@ -71,7 +87,7 @@ class CompanionCard(StrictModel):
 
 
 class CompanionResponse(StrictModel):
-    message: str = Field(max_length=1000)
+    message: str = Field(max_length=2000)
     cards: list[CompanionCard] = Field(default_factory=list, max_length=5)
     suggested_actions: list[str] = Field(default_factory=list, max_length=3)
     pending_call: ToolCall | None = None
@@ -79,6 +95,7 @@ class CompanionResponse(StrictModel):
     prompt_version: str
     model_name: str
     demo: bool
+    reference_date: date | None = None
 
 
 class CompanionStep(StrictModel):

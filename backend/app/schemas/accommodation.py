@@ -15,6 +15,7 @@ SortOrder = Literal["recommended", "price_asc", "price_desc", "guest_rating", "d
 
 
 class AccommodationSearchRequest(BaseModel):
+    cache_only: bool = False
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     user_id: UUID
@@ -38,6 +39,8 @@ class AccommodationSearchRequest(BaseModel):
 
     @model_validator(mode="after")
     def valid_stay(self):
+        if self.cache_only and self.refresh:
+            raise ValueError("A cache-only read cannot refresh provider inventory")
         if self.check_out <= self.check_in:
             raise ValueError("Hotel checkout must be after check-in")
         if self.nights > 90 or self.rooms > self.travelers:

@@ -151,6 +151,8 @@ class FoodRecommendationService:
         cached = self.cache.peek(key)
         if cached:
             return cached.model_copy(update={"cached": True})
+        if request.cache_only:
+            raise AppError("FOOD_CACHE_MISS", "No current food recommendations.", 404)
 
         async def load() -> FoodSearchResponse:
             now = time.monotonic()

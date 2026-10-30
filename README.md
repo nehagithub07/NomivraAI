@@ -1,10 +1,18 @@
 # NomivraAI client  
 
-A light design system, responsive application shell, Home dashboard, Supabase authentication, and a Create Trip Wizard with user-owned PostgreSQL data. Destination discovery, hotel/food recommendations, Step 9 AI itinerary planning, and Step 10 deterministic budget tracking use the existing Next.js BFF, Python/FastAPI services and signed Supabase persistence. Public destination providers remain subject to their terms and fair use; Gemini planning requires a private API key. Follow [AUTH_SETUP.md](AUTH_SETUP.md), [TRIPS_SETUP.md](TRIPS_SETUP.md), [backend/README.md](backend/README.md), [STEP9_REPORT.md](STEP9_REPORT.md), and [STEP10_REPORT.md](STEP10_REPORT.md) for setup.
+**Step 12: AI Travel Companion** is available per owned trip at
+`/trips/[tripId]/companion`. It extends the existing Gemini provider with manual,
+validated function calling, source cards, private chat history, and confirmation
+cards for seven explicit trip changes. Apply migration
+`20261030000900_ai_companion.sql` before use. See the [feature guide](docs/features/ai-companion.md),
+[architecture](docs/architecture/system-architecture.md), and
+[implementation/validation record](docs/history/step-12.md).
+
+A light design system, responsive application shell, Home dashboard, Supabase authentication, and a Create Trip Wizard with user-owned PostgreSQL data. Destination discovery, hotel/food recommendations, AI itinerary planning, deterministic budgets, weather adaptation and trip chat use the existing Next.js BFF, FastAPI services and signed Supabase persistence. Public providers remain subject to their terms; Gemini requires a private API key. Follow [authentication setup](docs/setup/authentication.md), [database setup](docs/setup/database.md), [backend setup](backend/README.md), [AI itineraries](docs/features/ai-itinerary.md), and [budget tracking](docs/features/budget-engine.md).
 
 ## Run locally
 
-For Vercel + Render deployment, follow [DEPLOYMENT.md](DEPLOYMENT.md). The Next.js
+For Vercel + Render deployment, follow the [deployment guide](docs/deployment/deployment.md). The Next.js
 app and FastAPI API deploy as separate services; Supabase remains the auth/database.
 
 ```sh
@@ -27,6 +35,9 @@ npm run test:accommodations
 npm run test:food
 npm run test:itineraries
 npm run test:budget
+npm run test:weather
+npm run test:companion
+npm run test:deployment
 ```
 
 ## Foundation
@@ -79,13 +90,13 @@ The seven steps are **Destination → Dates → Travelers → Budget → Interes
 - The authenticated Server Action explicitly maps user input and sends signed provider data to `create_resolved_trip`, which validates identity/proof and reuses Step 5's atomic trip/interests creation. Canonical name, provider ID, display name, country/admin fields, coordinates, timezone and feature/population data are persisted. Both trip tables retain RLS, restricted grants, constraints, and indexes.
 - My Trips and the UUID overview use real user-owned rows. The overview displays the saved requirements and links to Hotels, Food, Itinerary, and Budget. Trip edit/delete UI remains future work.
 
-See [TRIPS_SETUP.md](TRIPS_SETUP.md) for migration deployment, existing legacy-table preservation, all columns/policies/indexes, and manual type alignment. See [STEP5_REPORT.md](STEP5_REPORT.md) for the file list and verification results.
+See [database setup](docs/setup/database.md) for migration deployment, existing legacy-table preservation, columns/policies/indexes, and manual type alignment. See [the Step 5 record](docs/history/step-05.md) for the file list and verification results.
 
 If creating a trip, saving a stay, saving a food spot, generating an itinerary, or storing budget entries needs a database setup update, run `npm run db:prepare`. Run the generated private `.qa/setup-trip-database.sql` in your Supabase SQL Editor to install missing Step 6/7/8/9/10 migrations and configure the matching database secret atomically. The command prepares the file without changing the hosted database; see [backend/README.md](backend/README.md#database-migration-and-deployment). Existing trips are retained. Recent destination searches are cached in memory to avoid repeated provider and authentication requests.
 
 ## Authentication
 
-- Follow [AUTH_SETUP.md](AUTH_SETUP.md) for `.env.local`, Supabase Email/Google providers, Site URL/redirect configuration, SMTP, and the required verification/recovery email templates.
+- Follow [authentication setup](docs/setup/authentication.md) for `.env.local`, Supabase Email/Google providers, Site URL/redirect configuration, SMTP, and the required verification/recovery email templates.
 - Public routes are `/login`, `/signup`, `/forgot-password`, `/reset-password`, and `/verify-email`. `/auth/confirm` verifies token hashes; `/auth/callback` exchanges PKCE codes.
 - Next.js 16 uses `src/proxy.ts` to refresh cookie sessions and redirect logged-out app GETs. The `(app)` layout and data operations independently verify users. A trip action POST can return an expired-session error without discarding the form. App/auth layouts remain dynamic with private/no-store responses.
 - `src/lib/supabase` owns browser/server/proxy clients. `src/lib/auth` owns validated Server Actions, session checks, safe redirect paths, and sanitized identity. There is no service-role client or custom JWT/localStorage authentication.
@@ -119,7 +130,7 @@ Set `LLM_PROVIDER=gemini`, `GEMINI_API_KEY` and `GEMINI_MODEL=gemini-3.8-flash` 
 in FastAPI's private environment. Apply `20261029000600_itinerary_versions.sql`
 (included by `npm run db:prepare`). Planning supports 1–14 inclusive days, requires
 discovered attractions, and never guesses venues, prices or travel times. See
-[STEP9_REPORT.md](STEP9_REPORT.md) for setup, validation, bounded repair behavior,
+[AI itinerary documentation](docs/features/ai-itinerary.md) for setup, validation, bounded repair behavior,
 development fixtures and manual verification.
 
 ## Smart budget engine

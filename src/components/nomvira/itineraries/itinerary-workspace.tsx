@@ -67,6 +67,7 @@ export function ItineraryWorkspace({ tripId, initialItinerary, versions: initial
       <div className="flex flex-wrap items-center gap-3"><Badge><Sparkles className="mr-1 size-3.5" aria-hidden="true" />{saved.demo ? "Development fixture planner" : "AI-planned with NomivraAI"}</Badge>
         <span className="type-small text-muted-foreground">Version {saved.version_number}{saved.is_current ? " · Current" : " · Previous version"}</span>
         {saved.generation_reason === "weather_adaptation" && <span className="type-meta text-muted-foreground">Weather adaptation{saved.weather_fetched_at ? ` · Forecast fetched ${new Date(saved.weather_fetched_at).toLocaleDateString("en-US", { timeZone: "UTC" })}` : ""}</span>}
+        {saved.generation_reason === "companion_edit" && <span className="type-meta text-muted-foreground">Companion edit</span>}
         {versions.map(v => <Link key={v.id} href={`/trips/${tripId}/itinerary${v.is_current ? "" : `?version=${v.id}`}`} aria-current={saved.id === v.id ? "page" : undefined}
           className="type-meta inline-flex min-h-11 items-center rounded-full border px-4 hover:bg-muted">Version {v.version_number}</Link>)}
       </div>

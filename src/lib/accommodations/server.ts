@@ -38,7 +38,7 @@ export function validateHotelTrip(trip: TripRow) {
   if (!Number.isFinite(nights) || nights < 1 || nights > 90 || trip.start_date < todayInTimeZone(trip.destination_timezone || "UTC")) throw new TravelError("invalid_stay", "Choose a future hotel stay of 1–90 nights.", 422);
 }
 const providerCodes = new Set(["ACCOMMODATION_CONFIGURATION_ERROR", "ACCOMMODATION_PROVIDER_AUTH_ERROR", "ACCOMMODATION_PROVIDER_QUOTA_EXCEEDED", "ACCOMMODATION_PROVIDER_UNAVAILABLE", "ACCOMMODATION_PROVIDER_INVALID_RESPONSE", "ACCOMMODATION_DESTINATION_UNRESOLVED", "ACCOMMODATION_RATE_LIMITED"]);
-export async function searchTripHotels(trip: TripRow, userId: string, refresh = false, demo = false): Promise<HotelSearchResults> {
+export async function searchTripHotels(trip: TripRow, userId: string, refresh = false, demo = false, cacheOnly = false): Promise<HotelSearchResults> {
   validateHotelTrip(trip);
   if (demo && process.env.NODE_ENV === "production") throw new TravelError("ACCOMMODATION_CONFIGURATION_ERROR", "Demo search is disabled in production.");
   const cached = getCachedHotels(userId, trip, demo);
@@ -59,8 +59,8 @@ export async function searchTripHotels(trip: TripRow, userId: string, refresh = 
         check_in: trip.start_date, check_out: trip.end_date, travelers: trip.travelers_count,
         rooms: roomsForTravelers(trip.travelers_count), currency: trip.currency,
         accommodation_preferences: trip.accommodation_preferences,
-        trip_budget: String(trip.budget_total), budget_style: trip.budget_style, refresh, demo,
-      }), cache: "no-store", signal: AbortSignal.timeout(40_000), redirect: "error",
+        trip_budget: String(trip.budget_total), budget_style: trip.budget_style, refresh, demo, ...(cacheOnly ? { cache_only: true } : {}),
+      }), cache: "no-store", signal: AbortSignal.timeout(cacheOnly ? 5_000 : 40_000), redirect: "error",
     });
   } catch { throw new TravelError("ACCOMMODATION_PROVIDER_UNAVAILABLE", "Hotel search is temporarily unavailable."); }
   if (!response.ok) {

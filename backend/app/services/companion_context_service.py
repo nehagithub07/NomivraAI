@@ -20,26 +20,46 @@ def resolve_trip_date(value: str, context: CompanionContext, now: datetime | Non
     today = destination_today(context, now)
     match = re.fullmatch(r"day[_ ]([1-9]|1[0-4])", value)
     if match:
-        result = context.start_date + timedelta(days=int(match[1])-1)
+        result = context.start_date + timedelta(days=int(match[1]) - 1)
     elif value in ("today", "tonight", "tomorrow"):
         if today is None:
-            raise AppError("COMPANION_INVALID_DATE", "Choose a calendar date; destination timezone is unavailable.", 422)
+            raise AppError(
+                "COMPANION_INVALID_DATE",
+                "Choose a calendar date; destination timezone is unavailable.",
+                422,
+            )
         result = today + timedelta(days=value == "tomorrow")
-    elif value == "next_day":
+    elif value in ("next_day", "next day"):
         if context.reference_date is None:
-            raise AppError("COMPANION_INVALID_DATE", "Specify which day you mean before asking for the next day.", 422)
+            raise AppError(
+                "COMPANION_INVALID_DATE",
+                "Specify which day you mean before asking for the next day.",
+                422,
+            )
         result = context.reference_date + timedelta(days=1)
-    elif value in ("monday","tuesday","wednesday","thursday","friday","saturday","sunday"):
-        weekday = ("monday","tuesday","wednesday","thursday","friday","saturday","sunday").index(value)
-        first = context.start_date + timedelta(days=(weekday-context.start_date.weekday()) % 7)
+    elif value in ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"):
+        weekday = (
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "friday",
+            "saturday",
+            "sunday",
+        ).index(value)
+        first = context.start_date + timedelta(days=(weekday - context.start_date.weekday()) % 7)
         if first > context.end_date or first + timedelta(days=7) <= context.end_date:
-            raise AppError("COMPANION_INVALID_DATE", "Choose a calendar date or trip day number.", 422)
+            raise AppError(
+                "COMPANION_INVALID_DATE", "Choose a calendar date or trip day number.", 422
+            )
         result = first
     else:
         try:
             result = date.fromisoformat(value)
         except ValueError:
-            raise AppError("COMPANION_INVALID_DATE", "Choose a calendar date or trip day number.", 422) from None
+            raise AppError(
+                "COMPANION_INVALID_DATE", "Choose a calendar date or trip day number.", 422
+            ) from None
     if not context.start_date <= result <= context.end_date:
         raise AppError("COMPANION_INVALID_DATE", "That date is outside this trip.", 422)
     return result.isoformat()
@@ -48,5 +68,11 @@ def resolve_trip_date(value: str, context: CompanionContext, now: datetime | Non
 def compact_context(context: CompanionContext):
     if context.end_date < context.start_date:
         raise AppError("COMPANION_INVALID_CONTEXT", "Reload your saved trip.", 422)
-    return {**context.model_dump(mode="json"), "destination_today": str(destination_today(context)) if destination_today(context) else None,
-            "trip_days": (context.end_date-context.start_date).days+1}
+    today = destination_today(context)
+    result = context.model_dump(mode="json", exclude={"itinerary_version"})
+    result["has_current_itinerary"] = context.itinerary_version is not None
+    return {
+        **result,
+        "destination_today": today.isoformat() if today else None,
+        "trip_days": (context.end_date - context.start_date).days + 1,
+    }

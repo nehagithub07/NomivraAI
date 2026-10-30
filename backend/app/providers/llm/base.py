@@ -4,6 +4,10 @@ from app.schemas.itinerary import GeneratedItinerary, TripPlanningContext
 
 
 class LLMProvider(ABC):
+    async def chat(self, contents: list, declarations: list[dict]):
+        """Return one model Content. Application code executes every function call."""
+        raise NotImplementedError
+
     @abstractmethod
     async def generate_itinerary(
         self,

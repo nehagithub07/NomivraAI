@@ -6,11 +6,12 @@ function transactionBody(sql) {
   return sql.replace(/^\s*begin;\s*/i, "").replace(/\s*commit;\s*$/i, "");
 }
 
-export function buildTripDatabaseSetup(foundation, openProviders, internalKey, accommodations = "", food = "", itinerary = "", budget = "", weather = "") {
+export function buildTripDatabaseSetup(foundation, openProviders, internalKey, accommodations = "", food = "", itinerary = "", budget = "", weather = "", companion = "") {
   if (typeof internalKey !== "string" || internalKey.length < 32) throw new Error("Configure NOMVIRA_INTERNAL_API_KEY in .env.local first.");
   if (foundation.includes("$nomvira_foundation$") || openProviders.includes("$nomvira_open_providers$") || accommodations.includes("$nomvira_accommodations$") || food.includes("$nomvira_food$") || itinerary.includes("$nomvira_itinerary$") || budget.includes("$nomvira_budget$")) throw new Error("Unexpected migration delimiter.");
   const secret = internalKey.replaceAll("'", "''");
   if (weather.includes("$nomvira_weather$")) throw new Error("Unexpected migration delimiter.");
+  if (companion.includes("$nomvira_companion$")) throw new Error("Unexpected migration delimiter.");
   return `-- PRIVATE LOCAL FILE: contains the internal application secret. Do not share or commit.
 -- Run once in your project's Supabase SQL Editor as database owner.
 -- Atomic and safe to rerun against the supported Step 5/6/7/8/9/10/11 schema.
@@ -57,6 +58,12 @@ begin
     or to_regprocedure('public.create_resolved_trip(jsonb,text,text)') is null then
     raise exception 'Trip schema is incomplete. No setup changes were committed.';
   end if;
+  ${companion ? `if to_regclass('public.companion_conversations') is null then
+    execute $nomvira_companion$${transactionBody(companion)}$nomvira_companion$;
+  end if;
+  if to_regprocedure('public.claim_companion_action(text,text)') is null then
+    raise exception 'Companion schema is incomplete. No setup changes were committed.';
+  end if;` : ""}
 end;
 $nomvira_setup$;
 insert into nomvira_private.application_secrets(name,value)
@@ -72,7 +79,7 @@ export async function prepareTripDatabase(root = process.cwd()) {
   const match = envText.match(/^\s*NOMVIRA_INTERNAL_API_KEY\s*=\s*(?:"([^"\r\n]*)"|'([^'\r\n]*)'|([^#\r\n]*))/m);
   const internalKey = match && (match[1] ?? match[2] ?? match[3]).trim();
   const directory = path.join(root, "supabase", "migrations");
-  const [foundation, openProviders, accommodations, food, itinerary, budget, weather] = await Promise.all([
+  const [foundation, openProviders, accommodations, food, itinerary, budget, weather, companion] = await Promise.all([
     readFile(path.join(directory, "20261028000200_destination_intelligence.sql"), "utf8"),
     readFile(path.join(directory, "20261028000300_open_destination_providers.sql"), "utf8"),
     readFile(path.join(directory, "20261028000400_accommodation_selections.sql"), "utf8"),
@@ -80,10 +87,11 @@ export async function prepareTripDatabase(root = process.cwd()) {
     readFile(path.join(directory, "20261029000600_itinerary_versions.sql"), "utf8"),
     readFile(path.join(directory, "20261029000700_trip_budget_entries.sql"), "utf8"),
     readFile(path.join(directory, "20261030000800_weather_adaptation.sql"), "utf8"),
+    readFile(path.join(directory, "20261030000900_ai_companion.sql"), "utf8"),
   ]);
   const output = path.join(root, ".qa", "setup-trip-database.sql");
   await mkdir(path.dirname(output), { recursive: true });
-  await writeFile(output, buildTripDatabaseSetup(foundation, openProviders, internalKey, accommodations, food, itinerary, budget, weather), { mode: 0o600 });
+  await writeFile(output, buildTripDatabaseSetup(foundation, openProviders, internalKey, accommodations, food, itinerary, budget, weather, companion), { mode: 0o600 });
   return output;
 }
 

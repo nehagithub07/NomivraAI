@@ -19,6 +19,7 @@ FoodLabel = Literal[
 
 
 class FoodSearchRequest(BaseModel):
+    cache_only: bool = False
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     user_id: UUID
     latitude: float = Field(ge=-90, le=90)

@@ -11,7 +11,8 @@ export function internalKey() {
 }
 const discoveryProviderCodes = new Set(["PLACES_RATE_LIMITED", "PLACES_PROVIDER_RATE_LIMITED", "PLACES_PROVIDER_CONNECT_TIMEOUT", "PLACES_PROVIDER_CONNECTION_ERROR", "PLACES_PROVIDER_UNAVAILABLE", "PLACES_PROVIDER_INVALID_RESPONSE", "PLACES_PROVIDER_INVALID_REQUEST"]);
 const itineraryProviderCodes = new Set(["ITINERARY_CONFIGURATION_ERROR", "ITINERARY_INVALID_TRIP", "ITINERARY_INVALID_CONTEXT", "ITINERARY_MISSING_PLACES", "ITINERARY_RATE_LIMITED", "ITINERARY_PROVIDER_RATE_LIMITED", "ITINERARY_PROVIDER_AUTH_ERROR", "ITINERARY_PROVIDER_TIMEOUT", "ITINERARY_PROVIDER_UNAVAILABLE", "ITINERARY_PROVIDER_INVALID_RESPONSE", "ITINERARY_VALIDATION_FAILED"]);
-export async function callTravelApi<T>(endpoint: "destinations/search" | "places/discover" | "itineraries/generate" | "budget/summary" | "budget/entries/validate" | "weather/forecast" | "itineraries/adapt-weather", body: Record<string, unknown>, schema: z.ZodType<T>): Promise<T> {
+export async function callTravelApi<T>(endpoint: "destinations/search" | "places/discover" | "itineraries/generate" | "budget/summary" | "budget/entries/validate" | "weather/forecast" | "itineraries/adapt-weather" | "companion/chat" | "companion/actions/validate" | "companion/itinerary/edit", body: Record<string, unknown>, schema: z.ZodType<T>): Promise<T> {
+  if (endpoint.startsWith("companion/")) return callCompanionApi(endpoint, body, schema);
   if (endpoint === "weather/forecast" || endpoint === "itineraries/adapt-weather") return callWeatherApi(endpoint, body, schema);
   if (endpoint.startsWith("budget/")) return callBudgetApi(endpoint, body, schema);
   const key = internalKey(), base = process.env.NOMVIRA_API_URL;
@@ -45,6 +46,27 @@ export async function callTravelApi<T>(endpoint: "destinations/search" | "places
   }
   try { return schema.parse(await response.json()); }
   catch { throw new TravelError(planning ? "ITINERARY_PROVIDER_INVALID_RESPONSE" : "invalid_provider_response", planning ? "AI planning returned an unavailable plan." : searching ? "Destination search is temporarily unavailable." : "We couldn't load places right now. Your trip is safe."); }
+}
+
+async function callCompanionApi<T>(endpoint: string, body: Record<string, unknown>, schema: z.ZodType<T>): Promise<T> {
+  const base = process.env.NOMVIRA_API_URL;
+  let response: Response;
+  try {
+    if (!base) throw new Error();
+    response = await fetch(`${base.replace(/\/$/, "")}/api/v1/${endpoint}`, {
+      method: "POST", headers: { "Content-Type": "application/json", "X-Nomvira-Internal-Key": internalKey() },
+      body: JSON.stringify(body), cache: "no-store", redirect: "error", signal: AbortSignal.timeout(25_000),
+    });
+  } catch { throw new TravelError("COMPANION_PROVIDER_TIMEOUT", "Your companion is temporarily unavailable."); }
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    const allowed = new Set(["COMPANION_PROVIDER_TIMEOUT", "COMPANION_PROVIDER_RATE_LIMITED", "COMPANION_RATE_LIMITED", "COMPANION_INVALID_ARGUMENTS", "COMPANION_INVALID_DATE", "COMPANION_EXPIRED", "COMPANION_TOOL_LIMIT", "COMPANION_CONFIGURATION_ERROR", "COMPANION_CONFIRMATION_REQUIRED"]);
+    const code = allowed.has(data?.error?.code) ? data.error.code as string : "COMPANION_PROVIDER_UNAVAILABLE";
+    throw new TravelError(code, "Your companion couldn't complete that request. Your saved trip is safe.", [409, 422, 429, 502].includes(response.status) ? response.status : 503);
+  }
+  const result = schema.safeParse(await response.json().catch(() => null));
+  if (!result.success) throw new TravelError("COMPANION_INVALID_RESPONSE", "Your companion returned unavailable data.");
+  return result.data;
 }
 
 async function callWeatherApi<T>(endpoint: string, body: Record<string, unknown>, schema: z.ZodType<T>): Promise<T> {

@@ -68,7 +68,7 @@ export type BudgetEntryRow = {
   created_at: string; updated_at: string;
 };
 export type ItineraryVersionRow = {
-  generation_reason: "initial" | "weather_adaptation"; parent_version_id: string | null; weather_fetched_at: string | null;
+  generation_reason: "initial" | "weather_adaptation" | "companion_edit"; parent_version_id: string | null; weather_fetched_at: string | null;
   id: string; trip_id: string; request_id: string; version_number: number;
   status: "generating" | "ready" | "failed"; is_current: boolean;
   provider: "gemini" | "fixture" | null; model_name: string | null; prompt_version: string | null; demo: boolean;
@@ -103,6 +103,9 @@ export type CreateTripArguments = {
 export type Database = {
   public: {
     Tables: {
+      companion_conversations: { Row: { id: string; trip_id: string; user_id: string; active_request: string | null; active_until: string | null; created_at: string; updated_at: string }; Insert: never; Update: never; Relationships: [] };
+      companion_messages: { Row: { id: string; conversation_id: string; role: "user" | "assistant"; content: string; reply_to: string | null; metadata: Record<string, unknown>; created_at: string }; Insert: never; Update: never; Relationships: [] };
+      companion_pending_actions: { Row: { id: string; trip_id: string; user_id: string; tool_name: string; arguments: Record<string, unknown>; snapshot: Record<string, unknown>; preview: Record<string, unknown>; status: string; result: Record<string, unknown> | null; expires_at: string; created_at: string; confirmed_at: string | null; completed_at: string | null }; Insert: never; Update: never; Relationships: [] };
       trip_budget_entries: {
         Row: BudgetEntryRow;
         Insert: Omit<BudgetEntryRow, "source" | "created_at" | "updated_at">;
@@ -143,6 +146,13 @@ export type Database = {
     };
     Views: { [_ in never]: never };
     Functions: {
+      begin_companion_message: { Args: { p_trip_id: string; p_request_id: string; p_content: string }; Returns: unknown };
+      finish_companion_message: { Args: { p_payload: string; p_signature: string; p_document: string }; Returns: string };
+      prepare_companion_action: { Args: { p_payload: string; p_signature: string; p_document: string }; Returns: string };
+      claim_companion_action: { Args: { p_payload: string; p_signature: string }; Returns: unknown };
+      finish_companion_action: { Args: { p_payload: string; p_signature: string }; Returns: undefined };
+      begin_companion_itinerary_edit: { Args: { p_trip_id: string; p_request_id: string; p_parent_version_id: string }; Returns: string };
+      complete_companion_itinerary_edit: { Args: { p_payload: string; p_signature: string; p_document: string }; Returns: string };
       begin_weather_adaptation: { Args: { p_trip_id: string; p_request_id: string; p_parent_version_id: string }; Returns: string };
       complete_weather_adaptation: { Args: { p_payload: string; p_signature: string; p_document: string }; Returns: string };
       begin_itinerary_generation: { Args: { p_trip_id: string; p_request_id: string; p_regenerate?: boolean }; Returns: string };

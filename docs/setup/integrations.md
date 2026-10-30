@@ -1,3 +1,21 @@
+## AI Travel Companion (Step 12)
+
+Reuse backend-only `LLM_PROVIDER=gemini`, `GEMINI_MODEL=gemini-3.8-flash` and
+`GEMINI_API_KEY`. Chat extends the existing Gemini provider; no new AI SDK,
+credential, browser key or database service-role client is introduced. The
+existing `GEMINI_ITINERARY_MODEL` override remains available for planning.
+
+Apply `20261030000900_ai_companion.sql` after migrations 1–8. The private
+`npm run db:prepare` output includes the upgrade and uses the existing matching
+internal key. Redeploy both services after applying the schema. Chat calls
+internal-key FastAPI routes only through the authenticated Next.js BFF.
+
+Hotel/food reads use existing caches, including bounded cache-only backend reads
+across Vercel route instances; misses never trigger a live search. Search from
+the existing trip tabs to populate recommendations. Weather reads are also
+cache-only. Confirmed adaptation uses the existing Step 11 provider pipeline.
+See [AI companion](../features/ai-companion.md) for the tool and confirmation design.
+
 ## Open-Meteo forecast integration
 
 Step 11 calls weather providers only from FastAPI. Add these public configuration

@@ -131,6 +131,68 @@ class GeminiLLMProvider(LLMProvider):
     def __init__(self, settings: Settings):
         self.settings = settings
 
+    async def chat(self, contents: list, declarations: list[dict]):
+        from app.companion.prompts import SYSTEM_PROMPT as COMPANION_PROMPT
+
+        message = "Your travel companion is temporarily unavailable. Please try again."
+        key = self.settings.gemini_api_key.get_secret_value()
+        if not key:
+            raise AppError("COMPANION_CONFIGURATION_ERROR", message, 503)
+        try:
+            async with genai.Client(
+                api_key=key,
+                enterprise=False,
+                vertexai=False,
+                http_options=types.HttpOptions(retry_options=types.HttpRetryOptions(attempts=1)),
+            ).aio as client:
+                async with asyncio.timeout(20):
+                    response = await client.models.generate_content(
+                        model=self.settings.gemini_model,
+                        contents=contents,
+                        config=types.GenerateContentConfig(
+                            system_instruction=COMPANION_PROMPT,
+                            tools=[
+                                types.Tool(
+                                    function_declarations=[
+                                        types.FunctionDeclaration(**item) for item in declarations
+                                    ]
+                                )
+                            ],
+                            automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                                disable=True
+                            ),
+                            tool_config=types.ToolConfig(
+                                function_calling_config=types.FunctionCallingConfig(mode="ANY")
+                            ),
+                            thinking_config=types.ThinkingConfig(
+                                thinking_level="low", include_thoughts=False
+                            ),
+                            max_output_tokens=2048,
+                        ),
+                    )
+            if not response.candidates or not response.candidates[0].content:
+                raise ValueError("Missing model content")
+            content = response.candidates[0].content
+            if len(content.model_dump_json()) > 100_000:
+                raise ValueError("Oversized model content")
+            return content
+        except errors.APIError as error:
+            limited = error.code == 429
+            code = (
+                "RATE_LIMITED"
+                if limited
+                else "TIMEOUT"
+                if error.code in (408, 504)
+                else "UNAVAILABLE"
+            )
+            raise AppError(f"COMPANION_PROVIDER_{code}", message, 429 if limited else 503) from None
+        except (TimeoutError, httpx.TimeoutException):
+            raise AppError("COMPANION_PROVIDER_TIMEOUT", message, 503) from None
+        except (ValueError, TypeError, ValidationError):
+            raise AppError("COMPANION_PROVIDER_INVALID_RESPONSE", message, 502) from None
+        except Exception:
+            raise AppError("COMPANION_PROVIDER_UNAVAILABLE", message, 503) from None
+
     async def generate_itinerary(
         self,
         context: TripPlanningContext | WeatherPlanningContext,

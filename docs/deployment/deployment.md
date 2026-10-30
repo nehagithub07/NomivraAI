@@ -1,5 +1,18 @@
 # Deploy NomviraAI with Vercel and Render
 
+Step 12 requires `20261030000900_ai_companion.sql` after migrations 1–8. The
+current `npm run db:prepare` includes this upgrade. Apply it before redeploying
+Next.js and FastAPI. No new dependencies or environment secrets are needed;
+`GEMINI_MODEL=gemini-3.8-flash` is used for chat through the existing provider.
+
+Keep one Render worker/instance: bounded Gemini turn state and provider caches
+are process-local. Next.js companion message/confirmation routes declare
+`maxDuration=120`; verify that the selected Vercel plan/runtime permits that
+duration. Conversation/action records and rate/claim guards persist in Supabase.
+Cache-only backend reads recover hotel/food recommendations across Vercel route
+instances without running new provider searches. See [the companion deployment
+and limitations](../features/ai-companion.md#verification-and-remaining-limits).
+
 Deploy the repository root to **Vercel** (Next.js), and `backend/` to **Render**
 (FastAPI). Keep your existing **Supabase** project for authentication and data.
 Browser requests continue through the authenticated Next.js BFF. They never call

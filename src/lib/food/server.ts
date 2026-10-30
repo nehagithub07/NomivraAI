@@ -40,7 +40,7 @@ export function validateFoodTrip(trip: TripRow) {
   if (trip.destination_provider !== "open_meteo" || !trip.destination_provider_id || trip.destination_latitude === null || trip.destination_longitude === null) throw new TravelError("unresolved_destination", "Food search needs a confirmed destination.", 409);
 }
 const providerCodes = new Set(["FOOD_CONFIGURATION_ERROR", "FOOD_PROVIDER_AUTH_ERROR", "FOOD_PROVIDER_RATE_LIMITED", "FOOD_PROVIDER_UNAVAILABLE", "FOOD_PROVIDER_INVALID_RESPONSE", "FOOD_RATE_LIMITED"]);
-export async function searchTripFood(trip: TripRow, userId: string, options: FoodSearchOptions): Promise<FoodResults> {
+export async function searchTripFood(trip: TripRow, userId: string, options: FoodSearchOptions, cacheOnly = false): Promise<FoodResults> {
   validateFoodTrip(trip);
   if (options.demo && process.env.NODE_ENV === "production") throw new TravelError("FOOD_CONFIGURATION_ERROR", "Demo food search is disabled in production.");
   const cached = getCachedFood(userId, trip, options);
@@ -54,8 +54,8 @@ export async function searchTripFood(trip: TripRow, userId: string, options: Foo
     response = await fetch(`${base.replace(/\/$/, "")}/api/v1/food/search`, {
       method: "POST", headers: { "Content-Type": "application/json", "X-Nomvira-Internal-Key": key },
       body: JSON.stringify({ user_id: userId, latitude: trip.destination_latitude, longitude: trip.destination_longitude,
-        dietary_preferences: options.dietary_preferences ?? trip.dietary_preferences, ...options, limit: 20 }),
-      cache: "no-store", signal: AbortSignal.timeout(30_000), redirect: "error",
+        dietary_preferences: options.dietary_preferences ?? trip.dietary_preferences, ...options, limit: 20, ...(cacheOnly ? { cache_only: true } : {}) }),
+      cache: "no-store", signal: AbortSignal.timeout(cacheOnly ? 5_000 : 30_000), redirect: "error",
     });
   } catch { throw new TravelError("FOOD_PROVIDER_UNAVAILABLE", "We couldn't load food recommendations right now. Your trip is safe — please try again."); }
   if (!response.ok) {
