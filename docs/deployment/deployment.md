@@ -172,3 +172,23 @@ service has usage restrictions; retain the protections and review the existing
 [provider guidance](backend/README.md#providers-and-access-terms) before scaling.
 
 Reference: [Render Blueprint specification](https://render.com/docs/blueprint-spec).
+
+## Step 11 weather deployment
+
+Apply `supabase/migrations/20261030000800_weather_adaptation.sql` after the existing
+migrations. `npm run db:prepare` includes it in the private ignored setup SQL and
+remains safe to rerun against the supported schema. The command prepares a file;
+it does not apply changes to the hosted database.
+
+Render now declares `WEATHER_PROVIDER=open_meteo` and
+`OPEN_METEO_FORECAST_URL=https://api.open-meteo.com/v1`. These are also backend
+defaults, so existing services need no new secret. Keep the existing Gemini key
+only on Render. Vercel adds no new environment variable and continues using the
+existing BFF/internal-key connection. Redeploy both services after the migration.
+
+Weather caches and rate limits are process-local. Cold starts or multiple backend
+workers may have empty/independent caches; loading a trip tab never forces a
+provider fetch. Use Load/Refresh forecast explicitly. Forecast failure leaves the
+trip, itinerary and budget available. Follow [manual weather verification and
+limits](../features/weather-intelligence.md#manual-verification-and-limits) before
+claiming hosted acceptance.

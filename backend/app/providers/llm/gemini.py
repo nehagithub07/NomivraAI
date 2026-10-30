@@ -11,7 +11,9 @@ from app.core.config import Settings
 from app.core.errors import AppError
 from app.providers.llm.base import LLMProvider
 from app.providers.llm.prompt import SYSTEM_PROMPT
+from app.providers.llm.weather_prompt import WEATHER_SYSTEM_PROMPT
 from app.schemas.itinerary import GeneratedItinerary, TripPlanningContext
+from app.schemas.weather import WeatherPlanningContext
 
 logger = logging.getLogger("nomvira.itinerary")
 MESSAGE = "AI planning is temporarily unavailable. Your trip and previous itinerary are safe."
@@ -52,7 +54,9 @@ class GeminiLLMProvider(LLMProvider):
                         model=self.settings.gemini_model,
                         contents=json.dumps(content, ensure_ascii=False),
                         config=types.GenerateContentConfig(
-                            system_instruction=SYSTEM_PROMPT,
+                            system_instruction=WEATHER_SYSTEM_PROMPT
+                            if isinstance(context, WeatherPlanningContext)
+                            else SYSTEM_PROMPT,
                             response_mime_type="application/json",
                             response_schema=GeneratedItinerary,
                             temperature=0.2,

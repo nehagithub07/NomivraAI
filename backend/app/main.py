@@ -10,9 +10,12 @@ from app.core.errors import register_error_handlers
 from app.core.logging import RequestLoggingMiddleware, configure_logging
 from app.core.rate_limit import ProviderLimits
 from app.core.search_cache import DestinationSearchCache
+from app.providers.weather.open_meteo import OpenMeteoWeatherProvider
 from app.services.food_recommendation_service import FoodRecommendationService
 from app.services.hotel_recommendation_service import HotelRecommendationService
 from app.services.itinerary_generation_service import ItineraryGenerationService
+from app.services.weather_adaptation_service import WeatherAdaptationService
+from app.services.weather_service import WeatherService
 
 
 def create_app(
@@ -34,6 +37,12 @@ def create_app(
             app.state.accommodations = HotelRecommendationService(app.state.settings, client)
             app.state.food = FoodRecommendationService(app.state.settings, client)
             app.state.itineraries = ItineraryGenerationService(app.state.settings)
+            app.state.weather = WeatherService(
+                OpenMeteoWeatherProvider(client, str(app.state.settings.open_meteo_forecast_url))
+            )
+            app.state.weather_adaptation = WeatherAdaptationService(
+                app.state.weather, app.state.itineraries
+            )
             yield
 
     app = FastAPI(title="Nomvira API", version="0.1.0", lifespan=lifespan)

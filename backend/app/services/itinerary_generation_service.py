@@ -27,11 +27,19 @@ class ItineraryGenerationService:
         self.concurrent = asyncio.Semaphore(2)
         self.events: OrderedDict[str, float] = OrderedDict()
 
-    async def generate(self, request: ItineraryGenerationRequest) -> ItineraryGenerationResponse:
+    async def generate(
+        self,
+        request: ItineraryGenerationRequest,
+        *,
+        context_override=None,
+        validator=None,
+        prompt_version=ITINERARY_PROMPT_VERSION,
+    ) -> ItineraryGenerationResponse:
         demo = self.settings.llm_provider == "fixture"
         if demo and self.settings.app_env == "production":
             raise AppError("ITINERARY_CONFIGURATION_ERROR", MESSAGE, 503)
-        context = build_planning_context(request.context)
+        context = context_override or build_planning_context(request.context)
+        validate = validator or semantic_errors
         now, user = time.monotonic(), str(request.user_id)
         if self.concurrent.locked() or now - self.events.get(user, float("-inf")) < 30:
             raise AppError(
@@ -46,14 +54,14 @@ class ItineraryGenerationService:
             try:
                 async with asyncio.timeout(65):
                     plan = await self.provider.generate_itinerary(context)
-                    failures = semantic_errors(plan, context)
+                    failures = validate(plan, context)
                     repaired = bool(failures)
                     if failures:
                         logger.info("itinerary_repair_requested error_count=%d", len(failures))
                         plan = await self.provider.generate_itinerary(
                             context, previous=plan, validation_errors=failures
                         )
-                        if semantic_errors(plan, context):
+                        if validate(plan, context):
                             logger.warning("itinerary_semantic_validation_failed")
                             raise AppError(
                                 "ITINERARY_VALIDATION_FAILED",
@@ -75,7 +83,7 @@ class ItineraryGenerationService:
             return ItineraryGenerationResponse(
                 provider=self.settings.llm_provider,
                 model_name="deterministic-fixture-v1" if demo else self.settings.gemini_model,
-                prompt_version=ITINERARY_PROMPT_VERSION,
+                prompt_version=prompt_version,
                 demo=demo,
                 itinerary=document,
                 budget=context.budget,

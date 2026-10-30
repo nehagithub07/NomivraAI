@@ -18,6 +18,10 @@ services:
         sync: false
       - key: OPEN_METEO_GEOCODING_URL
         value: https://geocoding-api.open-meteo.com/v1
+      - key: WEATHER_PROVIDER
+        value: open_meteo
+      - key: OPEN_METEO_FORECAST_URL
+        value: https://api.open-meteo.com/v1
       - key: OVERPASS_API_URL
         value: https://overpass.private.coffee/api/interpreter
       - key: PROVIDER_USER_AGENT

@@ -9,6 +9,8 @@ import { SurfaceCard } from "@/components/nomvira/surface-card";
 import { itineraryErrorMessage } from "@/lib/itineraries/errors";
 import { savedItinerarySchema, budgetSummarySchema, type BudgetSummary, type SavedItinerary, type ItineraryVersionSummary } from "@/lib/itineraries/validation";
 import { formatTripBudget } from "@/lib/travel-format";
+import { WeatherWorkspace, WeatherDaySummary } from "@/components/nomvira/weather/weather-workspace";
+import type { WeatherReport } from "@/lib/weather/validation";
 
 const dateLabel = (date: string) => new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`));
 export function ItineraryWorkspace({ tripId, initialItinerary, versions: initialVersions, canGenerate, loadFailed, tripBudget, currency }: {
@@ -18,9 +20,10 @@ export function ItineraryWorkspace({ tripId, initialItinerary, versions: initial
   const [saved, setSaved] = useState(initialItinerary), [versions, setVersions] = useState(initialVersions);
   const [pending, setPending] = useState(false), [error, setError] = useState("");
   const [budget, setBudget] = useState<BudgetSummary | null>(null);
+  const [weather, setWeather] = useState<WeatherReport | null>(null), [weatherBusy, setWeatherBusy] = useState(false);
   const active = useRef(false), requestId = useRef<string | null>(null);
   async function generate() {
-    if (active.current || !canGenerate || loadFailed || (saved && !saved.is_current)) return;
+    if (active.current || weatherBusy || !canGenerate || loadFailed || (saved && !saved.is_current)) return;
     active.current = true; setPending(true); setError("");
     requestId.current ??= crypto.randomUUID();
     try {
@@ -47,7 +50,7 @@ export function ItineraryWorkspace({ tripId, initialItinerary, versions: initial
         <div className="max-w-2xl"><h2 className="type-section">{saved ? saved.itinerary.title : "Plan your trip with AI"}</h2>
           <p className="type-body mt-2 text-muted-foreground">{saved ? saved.itinerary.summary : "We'll use your trip preferences and real places you've discovered to build a personalized day-by-day itinerary."}</p>
           <p className="type-meta mt-3 text-muted-foreground">Generation sends your planning preferences and saved place details to Gemini. Costs and travel times are never guessed.</p></div>
-        {(!saved || saved.is_current) && <Button type="button" onClick={generate} loading={pending} disabled={!canGenerate || loadFailed}>
+        {(!saved || saved.is_current) && <Button type="button" onClick={generate} loading={pending} disabled={!canGenerate || loadFailed || weatherBusy}>
           <Sparkles className="size-4" aria-hidden="true" />{pending ? "Building your itinerary..." : saved ? "Generate new version" : "Generate itinerary"}</Button>}
       </div>
       {loadFailed && <p role="alert" className="type-small mt-4 text-destructive">We couldn&apos;t load itinerary planning. Your trip is saved. Please try again later.</p>}
@@ -56,8 +59,14 @@ export function ItineraryWorkspace({ tripId, initialItinerary, versions: initial
       {error && <div role="alert" className="type-small mt-4 text-destructive">{error} <Link href={`/trips/${tripId}/itinerary`} className="font-medium underline underline-offset-4">Check saved itinerary</Link></div>}
     </SurfaceCard>
     {saved && <>
+      <WeatherWorkspace key={saved.id} tripId={tripId} itinerary={saved} compact planningPending={pending}
+        onForecast={setWeather} onBusyChange={setWeatherBusy} onAdapted={next => {
+          setSaved(next); setWeather(null);
+          setVersions(previous => [{ id: next.id, version_number: next.version_number, created_at: next.created_at, is_current: next.is_current }, ...previous.filter(v => v.id !== next.id).map(v => ({ ...v, is_current: false }))].slice(0, 20));
+        }} />
       <div className="flex flex-wrap items-center gap-3"><Badge><Sparkles className="mr-1 size-3.5" aria-hidden="true" />{saved.demo ? "Development fixture planner" : "AI-planned with NomivraAI"}</Badge>
         <span className="type-small text-muted-foreground">Version {saved.version_number}{saved.is_current ? " · Current" : " · Previous version"}</span>
+        {saved.generation_reason === "weather_adaptation" && <span className="type-meta text-muted-foreground">Weather adaptation{saved.weather_fetched_at ? ` · Forecast fetched ${new Date(saved.weather_fetched_at).toLocaleDateString("en-US", { timeZone: "UTC" })}` : ""}</span>}
         {versions.map(v => <Link key={v.id} href={`/trips/${tripId}/itinerary${v.is_current ? "" : `?version=${v.id}`}`} aria-current={saved.id === v.id ? "page" : undefined}
           className="type-meta inline-flex min-h-11 items-center rounded-full border px-4 hover:bg-muted">Version {v.version_number}</Link>)}
       </div>
@@ -70,6 +79,7 @@ export function ItineraryWorkspace({ tripId, initialItinerary, versions: initial
       </SurfaceCard>
       <div className="space-y-6">{saved.itinerary.days.map(day => <SurfaceCard key={day.date} size="panel" className="p-5 sm:p-8">
         <div className="mb-6 flex items-start gap-3"><CalendarDays className="mt-1 size-5 text-muted-foreground" aria-hidden="true" /><div><h2 className="type-section">Day {day.day_number} — {day.theme}</h2><p className="type-small mt-1 text-muted-foreground">{dateLabel(day.date)}</p></div></div>
+        <div className="mb-5"><WeatherDaySummary day={weather?.forecast.days.find(d => d.date === day.date)} availability={weather?.forecast.availability} /></div>
         <ol className="space-y-5 border-l pl-5 sm:pl-7">{day.items.map((item, i) => {
           const Icon = item.candidate_type === "food" ? Utensils : item.candidate_type === "hotel" ? BedDouble : MapPin;
           return <li key={`${i}-${item.candidate_id}`} className="relative rounded-2xl border bg-background p-4 sm:p-5">

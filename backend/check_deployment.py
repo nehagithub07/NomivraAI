@@ -34,6 +34,7 @@ def deployment_errors(settings: Settings) -> list[str]:
     for name in (
         "frontend_origin",
         "open_meteo_geocoding_url",
+        "open_meteo_forecast_url",
         "overpass_api_url",
         "stayapi_base_url",
         "geoapify_base_url",

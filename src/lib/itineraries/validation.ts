@@ -29,6 +29,9 @@ export const savedItinerarySchema = z.object({
   id: z.uuid(), version_number: z.number().int().positive(), created_at: z.iso.datetime({ offset: true }),
   is_current: z.boolean(), provider: z.enum(["gemini", "fixture"]), model_name: z.string(), prompt_version: z.string(),
   demo: z.boolean(), stale: z.boolean(), itinerary: itineraryDocumentSchema,
+  generation_reason: z.enum(["initial", "weather_adaptation"]).default("initial"),
+  parent_version_id: z.uuid().nullable().default(null), weather_fetched_at: z.iso.datetime({ offset: true }).nullable().default(null),
+  document_hash: z.string().regex(/^[a-f0-9]{64}$/).nullable().default(null),
 });
 export type SavedItinerary = z.infer<typeof savedItinerarySchema>;
 export type ItineraryDocument = z.infer<typeof itineraryDocumentSchema>;

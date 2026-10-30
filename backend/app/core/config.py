@@ -34,9 +34,19 @@ class Settings(BaseSettings):
     llm_provider: Literal["gemini", "fixture"] = "gemini"
     gemini_api_key: SecretStr = SecretStr("")
     gemini_model: str = Field(default="gemini-3.8-flash", pattern=r"^[a-zA-Z0-9._-]{1,100}$")
+    weather_provider: Literal["open_meteo"] = "open_meteo"
+    open_meteo_forecast_url: AnyHttpUrl = AnyHttpUrl("https://api.open-meteo.com/v1")
 
     @model_validator(mode="after")
     def valid_radius(self):
+        if (
+            self.open_meteo_forecast_url.scheme != "https"
+            or self.open_meteo_forecast_url.username
+            or self.open_meteo_forecast_url.password
+            or self.open_meteo_forecast_url.query
+            or self.open_meteo_forecast_url.fragment
+        ):
+            raise ValueError("Forecast URL requires HTTPS without credentials or query parameters")
         if self.default_poi_radius_meters > self.max_poi_radius_meters:
             raise ValueError("Default POI radius exceeds configured maximum")
         if self.stayapi_base_url.scheme != "https":

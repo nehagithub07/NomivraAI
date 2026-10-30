@@ -68,6 +68,7 @@ export type BudgetEntryRow = {
   created_at: string; updated_at: string;
 };
 export type ItineraryVersionRow = {
+  generation_reason: "initial" | "weather_adaptation"; parent_version_id: string | null; weather_fetched_at: string | null;
   id: string; trip_id: string; request_id: string; version_number: number;
   status: "generating" | "ready" | "failed"; is_current: boolean;
   provider: "gemini" | "fixture" | null; model_name: string | null; prompt_version: string | null; demo: boolean;
@@ -142,6 +143,8 @@ export type Database = {
     };
     Views: { [_ in never]: never };
     Functions: {
+      begin_weather_adaptation: { Args: { p_trip_id: string; p_request_id: string; p_parent_version_id: string }; Returns: string };
+      complete_weather_adaptation: { Args: { p_payload: string; p_signature: string; p_document: string }; Returns: string };
       begin_itinerary_generation: { Args: { p_trip_id: string; p_request_id: string; p_regenerate?: boolean }; Returns: string };
       complete_itinerary_generation: { Args: { p_payload: string; p_signature: string; p_document: string }; Returns: string };
       fail_itinerary_generation: { Args: { p_payload: string; p_signature: string }; Returns: undefined };

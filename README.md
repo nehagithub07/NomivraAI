@@ -153,3 +153,17 @@ when paid to avoid duplicate costs. No new environment variables are needed.
 See [budget setup and behavior](docs/features/budget-engine.md) and the
 [Step 10 report](docs/history/step-10.md). Run `npm run test:budget` for focused checks.
 
+## Weather intelligence
+
+Open a trip's **Weather** tab and choose **Load forecast** for real daily and
+morning/afternoon/evening forecasts. Trips outside the supported forecast window
+show explicit gaps. Weather stays optional; tab navigation reads cached data.
+On the itinerary, **Adapt itinerary** uses verified weather and deterministic
+conflicts to propose the smallest validated change as a new version. Previous
+versions and manual budget entries stay intact. Gemini never supplies weather facts.
+
+Apply `20261030000800_weather_adaptation.sql` before adaptation. See
+[weather setup, rules and manual verification](docs/features/weather-intelligence.md)
+and the [Step 11 implementation record](docs/history/step-11.md).
+Run `npm run test:weather` for focused checks.
+

@@ -13,6 +13,8 @@ class FixtureLLMProvider(LLMProvider):
     async def generate_itinerary(
         self, context: TripPlanningContext, **_kwargs
     ) -> GeneratedItinerary:
+        if hasattr(context, "original"):
+            return context.original.model_copy(deep=True)
         pool = iter(
             sorted(
                 context.attractions,

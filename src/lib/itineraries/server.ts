@@ -41,6 +41,8 @@ export async function getItinerary(db: DB, trip: TripWithInterests, versionId?: 
   return savedItinerarySchema.parse({
     id: data.id, version_number: data.version_number, created_at: data.created_at, is_current: data.is_current,
     provider: data.provider, model_name: data.model_name, prompt_version: data.prompt_version, demo: data.demo,
+    generation_reason: data.generation_reason ?? "initial", parent_version_id: data.parent_version_id ?? null,
+    weather_fetched_at: data.weather_fetched_at ?? null, document_hash: data.document_hash ?? null,
     stale: !sameContext(data.trip_context, itineraryTripContext(trip)),
     itinerary: { title: data.title, summary: data.summary, warnings: data.warnings,
       days: data.itinerary_days.sort((a, b) => a.day_number - b.day_number).map(day => ({

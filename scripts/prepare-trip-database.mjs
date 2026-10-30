@@ -6,13 +6,14 @@ function transactionBody(sql) {
   return sql.replace(/^\s*begin;\s*/i, "").replace(/\s*commit;\s*$/i, "");
 }
 
-export function buildTripDatabaseSetup(foundation, openProviders, internalKey, accommodations = "", food = "", itinerary = "", budget = "") {
+export function buildTripDatabaseSetup(foundation, openProviders, internalKey, accommodations = "", food = "", itinerary = "", budget = "", weather = "") {
   if (typeof internalKey !== "string" || internalKey.length < 32) throw new Error("Configure NOMVIRA_INTERNAL_API_KEY in .env.local first.");
   if (foundation.includes("$nomvira_foundation$") || openProviders.includes("$nomvira_open_providers$") || accommodations.includes("$nomvira_accommodations$") || food.includes("$nomvira_food$") || itinerary.includes("$nomvira_itinerary$") || budget.includes("$nomvira_budget$")) throw new Error("Unexpected migration delimiter.");
   const secret = internalKey.replaceAll("'", "''");
+  if (weather.includes("$nomvira_weather$")) throw new Error("Unexpected migration delimiter.");
   return `-- PRIVATE LOCAL FILE: contains the internal application secret. Do not share or commit.
 -- Run once in your project's Supabase SQL Editor as database owner.
--- Atomic and safe to rerun against the supported Step 5/6/7/8/9/10 schema.
+-- Atomic and safe to rerun against the supported Step 5/6/7/8/9/10/11 schema.
 begin;
 do $nomvira_setup$
 begin
@@ -46,6 +47,12 @@ begin
     or to_regprocedure('public.guard_budget_currency()') is null then
     raise exception 'Budget schema is incomplete. No setup changes were committed.';
   end if;` : ""}
+  ${weather ? `if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='itinerary_versions' and column_name='generation_reason') then
+    execute $nomvira_weather$${transactionBody(weather)}$nomvira_weather$;
+  end if;
+  if to_regprocedure('public.complete_weather_adaptation(text,text,text)') is null then
+    raise exception 'Weather adaptation schema is incomplete. No setup changes were committed.';
+  end if;` : ""}
   if to_regclass('nomvira_private.application_secrets') is null
     or to_regprocedure('public.create_resolved_trip(jsonb,text,text)') is null then
     raise exception 'Trip schema is incomplete. No setup changes were committed.';
@@ -65,17 +72,18 @@ export async function prepareTripDatabase(root = process.cwd()) {
   const match = envText.match(/^\s*NOMVIRA_INTERNAL_API_KEY\s*=\s*(?:"([^"\r\n]*)"|'([^'\r\n]*)'|([^#\r\n]*))/m);
   const internalKey = match && (match[1] ?? match[2] ?? match[3]).trim();
   const directory = path.join(root, "supabase", "migrations");
-  const [foundation, openProviders, accommodations, food, itinerary, budget] = await Promise.all([
+  const [foundation, openProviders, accommodations, food, itinerary, budget, weather] = await Promise.all([
     readFile(path.join(directory, "20261028000200_destination_intelligence.sql"), "utf8"),
     readFile(path.join(directory, "20261028000300_open_destination_providers.sql"), "utf8"),
     readFile(path.join(directory, "20261028000400_accommodation_selections.sql"), "utf8"),
     readFile(path.join(directory, "20261029000500_food_selections.sql"), "utf8"),
     readFile(path.join(directory, "20261029000600_itinerary_versions.sql"), "utf8"),
     readFile(path.join(directory, "20261029000700_trip_budget_entries.sql"), "utf8"),
+    readFile(path.join(directory, "20261030000800_weather_adaptation.sql"), "utf8"),
   ]);
   const output = path.join(root, ".qa", "setup-trip-database.sql");
   await mkdir(path.dirname(output), { recursive: true });
-  await writeFile(output, buildTripDatabaseSetup(foundation, openProviders, internalKey, accommodations, food, itinerary, budget), { mode: 0o600 });
+  await writeFile(output, buildTripDatabaseSetup(foundation, openProviders, internalKey, accommodations, food, itinerary, budget, weather), { mode: 0o600 });
   return output;
 }
 
