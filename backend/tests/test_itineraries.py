@@ -1,6 +1,8 @@
+import asyncio
 import json
 import logging
 from datetime import UTC, date, datetime, timedelta
+from itertools import combinations
 from types import SimpleNamespace
 from uuid import UUID
 
@@ -12,6 +14,7 @@ from app.core.config import Settings
 from app.core.errors import AppError
 from app.main import create_app
 from app.providers.llm.base import LLMProvider
+from app.providers.llm.context import compact_planning_context
 from app.providers.llm.fixture import FixtureLLMProvider
 from app.providers.llm.gemini import GeminiLLMProvider
 from app.providers.llm.prompt import ITINERARY_PROMPT_VERSION, SYSTEM_PROMPT
@@ -59,6 +62,162 @@ def planning(**changes):
             **changes,
         }
     )
+
+
+def dense_planning(**changes):
+    base = planning().model_dump()
+    base["attractions"] = [
+        {
+            **base["attractions"][0],
+            "candidate_id": f"node/{i}",
+            "name": f"Saved Place {i}",
+            "category": "park" if i <= 20 else "museum",
+            "latitude": 35.69 + i / 10000,
+            "distance_km": (31 - i) / 10,
+            "opening_hours": "Unverified provider opening hours; confirm before visiting.",
+        }
+        for i in range(1, 31)
+    ]
+    base["food"] = [
+        {
+            "candidate_id": f"saved-food-{i}",
+            "provider": "geoapify",
+            "name": f"Saved Cafe {i}",
+            "category": "cafe",
+            "cuisine_types": ["japanese"],
+            "dietary_tags": ["vegetarian"],
+            "latitude": 35.69,
+            "longitude": 139.69,
+            "distance_km": i / 10,
+            "recommendation_score": i / 20,
+        }
+        for i in range(1, 21)
+    ]
+    return PlanningInput.model_validate({**base, **changes})
+
+
+@pytest.mark.parametrize(
+    "days,pace,attraction_count,food_count",
+    [
+        (1, "relaxed", 10, 10),
+        (3, "relaxed", 11, 10),
+        (3, "balanced", 14, 10),
+        (3, "packed", 17, 10),
+        (5, "packed", 20, 12),
+        (14, "packed", 20, 12),
+    ],
+)
+def test_context_shortlist_depends_on_duration_pace_and_has_hard_caps(
+    days, pace, attraction_count, food_count
+):
+    source = dense_planning(end_date=date(2099, 4, 12) + timedelta(days=days - 1), travel_pace=pace)
+    context = build_planning_context(source)
+    assert len(context.attractions) == attraction_count
+    assert len(context.food) == food_count
+    assert len(context.proximity) == 30
+    selected = {item.candidate_id for item in context.attractions}
+    assert all(
+        pair.first_id in selected and pair.second_id in selected for pair in context.proximity
+    )
+    assert len(source.attractions) == 30 and len(source.food) == 20  # Input is unchanged.
+    if days == 14:
+        assert any("unscheduled" in warning for warning in context.warnings)
+
+
+def test_context_keeps_interest_matches_then_existing_distance_and_food_ranking():
+    source = dense_planning()
+    source.food[-1].dietary_conflicts = ["vegetarian"]
+    context = build_planning_context(source)
+    assert [item.candidate_id for item in context.attractions] == [
+        f"node/{i}" for i in range(30, 16, -1)
+    ]
+    assert [item.candidate_id for item in context.food] == [
+        f"saved-food-{i}" for i in range(19, 9, -1)
+    ]
+    assert all(item in source.attractions for item in context.attractions)
+    assert all(item in source.food for item in context.food)
+    source.interests = ["nature"]
+    assert [item.candidate_id for item in build_planning_context(source).attractions] == [
+        f"node/{i}" for i in range(20, 6, -1)
+    ]
+
+
+def test_shortlisting_is_deterministic_for_ties_and_missing_food_scores():
+    source = dense_planning()
+    for item in source.food:
+        item.recommendation_score = None
+        item.distance_km = None
+    original = build_planning_context(source)
+    source.food.reverse()
+    source.attractions.reverse()
+    assert build_planning_context(source) == original
+
+
+def test_compact_context_preserves_ids_and_excludes_provider_metadata_and_nulls():
+    source = dense_planning(
+        hotel={
+            "candidate_id": str(TRIP),
+            "provider_accommodation_id": "123",
+            "name": "Saved Hotel",
+            "guest_rating": 4.5,
+            "guest_rating_scale": 5,
+        }
+    )
+    context = build_planning_context(source)
+    payload = compact_planning_context(context)
+    assert [item["candidate_id"] for item in payload["attractions"]] == [
+        item.candidate_id for item in context.attractions
+    ]
+    assert [item["candidate_id"] for item in payload["food"]] == [
+        item.candidate_id for item in context.food
+    ]
+    assert payload["hotel"] == {"candidate_id": str(TRIP), "name": "Saved Hotel"}
+    assert payload["attractions"][0]["interest_tags"] == ["history"]
+    assert payload["attractions"][0]["rank"] == 1
+    text = json.dumps(payload)
+    for field in (
+        "provider",
+        "provider_accommodation_id",
+        "trip_id",
+        "opening_hours",
+        "quote_expires_at",
+        "guest_rating",
+        "distance_km",
+        "recommendation_score",
+    ):
+        assert f'"{field}"' not in text
+    assert "null" not in text and "Unverified provider opening hours" not in text
+
+
+def test_compact_context_substantially_reduces_full_candidate_prompt():
+    source = dense_planning()
+    full = build_planning_context(source, trim_candidates=False).model_dump(
+        mode="json", exclude={"trip_id"}
+    )
+    # The previous pipeline sent the nearest 60 pairs over all discovered attractions.
+    full["proximity"] = [
+        {"first_id": a.candidate_id, "second_id": b.candidate_id, "straight_line_km": 0.1}
+        for a, b in list(combinations(source.attractions, 2))[:60]
+    ]
+    for food in full["food"]:
+        food.pop("recommendation_score")  # Not part of the previous request.
+    before = json.dumps({"planning_context": full}, ensure_ascii=False).encode("utf-8")
+    after = json.dumps(
+        {"planning_context": compact_planning_context(build_planning_context(source))},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    assert len(after) < len(before) * 0.6
+
+
+async def test_trimmed_context_passes_strict_validation_and_rejects_excluded_ids():
+    plan, context = await fixture_plan(dense_planning())
+    from app.schemas.itinerary import GeneratedItinerary
+
+    assert GeneratedItinerary.model_validate_json(plan.model_dump_json()) == plan
+    assert semantic_errors(plan, context) == []
+    plan.days[0].items[0].candidate_id = "node/1"
+    assert "unknown_attraction_id" in semantic_errors(plan, context)
 
 
 async def fixture_plan(source=None):
@@ -268,7 +427,7 @@ def sdk_transport(monkeypatch, handler):
 
     def client(**kwargs):
         options = kwargs["http_options"]
-        assert options.retry_options.attempts == 1 and options.timeout == 30000
+        assert options.retry_options.attempts == 1 and options.timeout is None
         calls.append(kwargs)
         kwargs["http_options"] = options.model_copy(
             update={"async_client_args": {"transport": httpx.MockTransport(handler)}}
@@ -279,23 +438,18 @@ def sdk_transport(monkeypatch, handler):
     return calls
 
 
-async def test_real_sdk_async_structured_request_uses_model_schema_and_no_auth_context(monkeypatch):
+@pytest.mark.parametrize(
+    "model,thinking", [("gemini-3.8-flash", "LOW"), ("gemini-3.6-flash", "MINIMAL")]
+)
+async def test_real_sdk_async_structured_request_uses_model_schema_and_no_auth_context(
+    monkeypatch, caplog, model, thinking
+):
+    caplog.set_level(logging.INFO, logger="nomvira.itinerary")
     plan, context = await fixture_plan()
     requests = []
 
     def handler(request):
         requests.append(request)
-        payload = json.loads(request.content)
-        assert "gemini-3.8-flash" in str(request.url)
-        assert payload["generationConfig"]["responseMimeType"] == "application/json"
-        assert "days" in payload["generationConfig"]["responseSchema"]["properties"]
-        text = payload["contents"][0]["parts"][0]["text"]
-        assert (
-            "user_id" not in text
-            and "trip_id" not in text
-            and "test-private-gemini-key" not in text
-        )
-        assert "tools" not in payload
         return httpx.Response(
             200,
             json={
@@ -309,21 +463,71 @@ async def test_real_sdk_async_structured_request_uses_model_schema_and_no_auth_c
         )
 
     sdk_transport(monkeypatch, handler)
-    result = await GeminiLLMProvider(
-        Settings(_env_file=None, gemini_api_key="test-private-gemini-key")
-    ).generate_itinerary(context)
-    assert result == plan and len(requests) == 1
+    result = await ItineraryGenerationService(
+        Settings(
+            _env_file=None,
+            gemini_api_key="test-private-gemini-key",
+            gemini_itinerary_model=model,
+            gemini_model="future-companion-model",
+        )
+    ).generate(ItineraryGenerationRequest(user_id=USER, context=planning()))
+    assert len(result.itinerary.days) == 3 and len(requests) == 1
+    payload = json.loads(requests[0].content)
+    assert model in str(requests[0].url)
+    config = payload["generationConfig"]
+    assert config["responseMimeType"] == "application/json"
+    assert "days" in config["responseJsonSchema"]["properties"]
+    # google-genai 2.34 serializes nested thinking fields using protobuf snake_case.
+    assert config["thinkingConfig"]["thinking_level"] == thinking
+    assert config["maxOutputTokens"] == 6144
+    assert not {"temperature", "topP", "topK"} & config.keys()
+    text = payload["contents"][0]["parts"][0]["text"]
+    assert "user_id" not in text and "trip_id" not in text
+    assert "test-private-gemini-key" not in text and "tools" not in payload
+    expected_prompt_bytes = len(text.encode("utf-8")) + len(SYSTEM_PROMPT.encode("utf-8"))
+    assert f"prompt_bytes={expected_prompt_bytes}" in caplog.text
+    assert result.model_name == model
     assert "Never invent" in SYSTEM_PROMPT
+    for metric in (
+        f"model={model}",
+        "trip_days=3",
+        "attraction_count=8",
+        "food_count=1",
+        "proximity_pair_count=28",
+        "prompt_bytes=",
+        "elapsed_ms=",
+        "response_bytes=",
+    ):
+        assert metric in caplog.text
+    assert f"response_bytes={len(plan.model_dump_json().encode('utf-8'))}" in caplog.text
+    assert "Provider Museum" not in caplog.text and "test-private-gemini-key" not in caplog.text
+    assert "Include rest breaks" not in caplog.text and str(TRIP) not in caplog.text
+
+
+def test_itinerary_model_is_configured_separately_from_general_gemini_model(monkeypatch):
+    monkeypatch.setenv("GEMINI_MODEL", "future-companion-model")
+    monkeypatch.delenv("GEMINI_ITINERARY_MODEL", raising=False)
+    assert Settings(_env_file=None).gemini_itinerary_model == "gemini-3.6-flash"
+    monkeypatch.setenv("GEMINI_ITINERARY_MODEL", "gemini-3.6-flash")
+    settings = Settings(_env_file=None)
+    assert settings.gemini_model == "future-companion-model"
+    assert settings.gemini_itinerary_model == "gemini-3.6-flash"
+    monkeypatch.setenv("GEMINI_ITINERARY_MODEL", "invalid/model")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
 
 
 @pytest.mark.parametrize(
     "status,code",
     [
+        (400, "ITINERARY_CONFIGURATION_ERROR"),
         (401, "ITINERARY_PROVIDER_AUTH_ERROR"),
         (403, "ITINERARY_PROVIDER_AUTH_ERROR"),
         (404, "ITINERARY_CONFIGURATION_ERROR"),
         (429, "ITINERARY_PROVIDER_RATE_LIMITED"),
         (503, "ITINERARY_PROVIDER_UNAVAILABLE"),
+        (408, "ITINERARY_PROVIDER_TIMEOUT"),
+        (504, "ITINERARY_PROVIDER_TIMEOUT"),
     ],
 )
 async def test_provider_statuses_are_safe_and_not_retried(monkeypatch, caplog, status, code):
@@ -358,6 +562,53 @@ async def test_provider_timeout_is_mapped_without_retry(monkeypatch):
             Settings(_env_file=None, gemini_api_key="test-key")
         ).generate_itinerary(context)
     assert error.value.code == "ITINERARY_PROVIDER_TIMEOUT" and len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "ITINERARY_PROVIDER_TIMEOUT",
+        "ITINERARY_PROVIDER_UNAVAILABLE",
+        "ITINERARY_PROVIDER_AUTH_ERROR",
+        "ITINERARY_PROVIDER_RATE_LIMITED",
+        "ITINERARY_CONFIGURATION_ERROR",
+    ],
+)
+async def test_provider_failures_do_not_trigger_semantic_repair(code):
+    provider = ScriptedProvider([AppError(code, "Safe failure", 503)])
+    service = ItineraryGenerationService(Settings(_env_file=None), provider)
+    with pytest.raises(AppError) as error:
+        await service.generate(ItineraryGenerationRequest(user_id=USER, context=planning()))
+    assert error.value.code == code and len(provider.calls) == 1
+    assert provider.calls[0] == {} and service.concurrent._value == 2
+
+
+@pytest.mark.parametrize("timeout_scope", ["attempt", "generation"])
+async def test_elapsed_deadline_cancels_request_without_semantic_repair(monkeypatch, timeout_scope):
+    from app.providers.llm import gemini
+    from app.services import itinerary_generation_service
+
+    calls, cancelled = [], []
+
+    async def handler(request):
+        calls.append(request)
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.append(True)
+
+    sdk_transport(monkeypatch, handler)
+    if timeout_scope == "attempt":
+        monkeypatch.setattr(gemini, "GEMINI_ATTEMPT_TIMEOUT_SECONDS", 0.01)
+    else:
+        monkeypatch.setattr(itinerary_generation_service, "GENERATION_TIMEOUT_SECONDS", 0.01)
+    service = ItineraryGenerationService(
+        Settings(_env_file=None, gemini_api_key="private-test-key")
+    )
+    with pytest.raises(AppError) as error:
+        await service.generate(ItineraryGenerationRequest(user_id=USER, context=planning()))
+    assert error.value.code == "ITINERARY_PROVIDER_TIMEOUT" and len(calls) == 1
+    assert cancelled == [True] and service.concurrent._value == 2
 
 
 @pytest.mark.parametrize("text", ["not json", '{"days":[]}', '{"days":[],"prices":{"dinner":45}}'])

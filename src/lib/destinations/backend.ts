@@ -27,7 +27,7 @@ export async function callTravelApi<T>(endpoint: "destinations/search" | "places
       headers: { "Content-Type": "application/json", "X-Nomvira-Internal-Key": key },
       ...(searching ? {} : { body: JSON.stringify(body) }),
       // Discovery can wait up to 8 seconds, then spend up to 45 seconds in Overpass.
-      cache: "no-store", signal: AbortSignal.timeout(searching ? 15_000 : planning ? 75_000 : 60_000), redirect: "error",
+      cache: "no-store", signal: AbortSignal.timeout(searching ? 15_000 : planning ? 90_000 : 60_000), redirect: "error",
     });
   } catch { throw new TravelError(planning ? "ITINERARY_PROVIDER_UNAVAILABLE" : "provider_unavailable", planning ? "AI planning is temporarily unavailable." : searching ? "Destination search is temporarily unavailable." : "We couldn't load places right now. Your trip is safe."); }
   if (!response.ok) {

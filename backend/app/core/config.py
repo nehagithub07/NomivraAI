@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     llm_provider: Literal["gemini", "fixture"] = "gemini"
     gemini_api_key: SecretStr = SecretStr("")
     gemini_model: str = Field(default="gemini-3.8-flash", pattern=r"^[a-zA-Z0-9._-]{1,100}$")
+    gemini_itinerary_model: str = Field(
+        default="gemini-3.6-flash", pattern=r"^[a-zA-Z0-9._-]{1,100}$"
+    )
     weather_provider: Literal["open_meteo"] = "open_meteo"
     open_meteo_forecast_url: AnyHttpUrl = AnyHttpUrl("https://api.open-meteo.com/v1")
 

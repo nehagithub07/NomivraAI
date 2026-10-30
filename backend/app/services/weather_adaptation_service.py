@@ -109,7 +109,8 @@ class WeatherAdaptationService:
                 "Development planning is disabled in production.",
                 503,
             )
-        context = build_planning_context(request.context)
+        # Older saved plans may reference candidates outside the new generation shortlist.
+        context = build_planning_context(request.context, trim_candidates=False)
         if semantic_errors(request.original, context):
             raise AppError(
                 "WEATHER_CONTEXT_CHANGED",
@@ -133,7 +134,7 @@ class WeatherAdaptationService:
                 provider=self.itineraries.settings.llm_provider,
                 model_name="deterministic-fixture-v1"
                 if self.itineraries.settings.llm_provider == "fixture"
-                else self.itineraries.settings.gemini_model,
+                else self.itineraries.settings.gemini_itinerary_model,
                 prompt_version=WEATHER_ADAPTATION_PROMPT_VERSION,
                 demo=self.itineraries.settings.llm_provider == "fixture",
                 itinerary=resolve_itinerary(request.original, context),

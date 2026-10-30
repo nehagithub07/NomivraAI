@@ -4,12 +4,18 @@ from itertools import combinations
 from app.core.errors import AppError
 from app.providers.places.overpass import haversine_km
 from app.schemas.itinerary import BudgetSummary, PlanningInput, Proximity, TripPlanningContext
+from app.services.itinerary_validation_service import CATEGORY_INTERESTS
 
 DAILY_CAPACITY = {"relaxed": 2, "balanced": 3, "packed": 4}
 MAX_TRIP_DAYS = 14
+MAX_ATTRACTIONS = 20
+MAX_FOOD = 12
+MAX_PROXIMITY_PAIRS = 30
 
 
-def build_planning_context(source: PlanningInput) -> TripPlanningContext:
+def build_planning_context(
+    source: PlanningInput, *, trim_candidates: bool = True
+) -> TripPlanningContext:
     count = (source.end_date - source.start_date).days + 1
     if not 1 <= count <= MAX_TRIP_DAYS:
         raise AppError("ITINERARY_INVALID_TRIP", "AI planning supports trips of 1–14 days.", 422)
@@ -28,14 +34,37 @@ def build_planning_context(source: PlanningInput) -> TripPlanningContext:
         for item in source.food
         if not set(item.dietary_conflicts).intersection(source.dietary_preferences)
     ]
+    excluded_food = len(food) != len(source.food)
+    attractions = source.attractions
+    if trim_candidates:
+        required = count * DAILY_CAPACITY[source.travel_pace]
+        interests = set(source.interests)
+        # Keep the discovery distance/ID ordering within each interest match tier.
+        attractions = sorted(
+            attractions,
+            key=lambda item: (
+                -len(CATEGORY_INTERESTS[item.category] & interests),
+                item.distance_km,
+                item.candidate_id,
+            ),
+        )[: min(MAX_ATTRACTIONS, max(10, required + 5))]
+        food = sorted(
+            food,
+            key=lambda item: (
+                -(item.recommendation_score or 0),
+                item.distance_km if item.distance_km is not None else float("inf"),
+                item.name.casefold(),
+                item.candidate_id,
+            ),
+        )[: min(MAX_FOOD, max(10, count * 2 + 2))]
     warnings = [
         "Opening hours have not been verified for the planned dates. Confirm before visiting.",
         "Attraction and meal costs are unknown. This is not a fully priced itinerary.",
         "Proximity uses straight-line distance, not walking or driving time.",
     ]
-    if len(source.attractions) < count * DAILY_CAPACITY[source.travel_pace]:
+    if len(attractions) < count * DAILY_CAPACITY[source.travel_pace]:
         warnings.append(
-            "There are fewer saved attractions than daily activity slots; "
+            "There are fewer selected attractions than daily activity slots; "
             "some periods may remain unscheduled."
         )
     if not food:
@@ -46,7 +75,7 @@ def build_planning_context(source: PlanningInput) -> TripPlanningContext:
         warnings.append(
             "Confirm dietary suitability with each food venue; missing metadata is unknown."
         )
-    if len(food) != len(source.food):
+    if excluded_food:
         warnings.append("Food spots with explicit dietary conflicts were excluded.")
     known = None
     hotel = source.hotel
@@ -88,12 +117,12 @@ def build_planning_context(source: PlanningInput) -> TripPlanningContext:
                     haversine_km(a.latitude, a.longitude, b.latitude, b.longitude), 3
                 ),
             )
-            for a, b in combinations(source.attractions, 2)
+            for a, b in combinations(attractions, 2)
         ),
         key=lambda pair: (pair.straight_line_km, pair.first_id, pair.second_id),
-    )[:60]
+    )[:MAX_PROXIMITY_PAIRS]
     return TripPlanningContext(
-        **{**source.model_dump(), "food": food},
+        **{**source.model_dump(), "attractions": attractions, "food": food},
         dates=[source.start_date + timedelta(days=i) for i in range(count)],
         max_attractions_per_day=DAILY_CAPACITY[source.travel_pace],
         budget=budget,

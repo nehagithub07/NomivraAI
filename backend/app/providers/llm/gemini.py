@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 
 import httpx
 from google import genai
@@ -10,13 +11,120 @@ from pydantic import ValidationError
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.providers.llm.base import LLMProvider
+from app.providers.llm.context import compact_planning_context
 from app.providers.llm.prompt import SYSTEM_PROMPT
 from app.providers.llm.weather_prompt import WEATHER_SYSTEM_PROMPT
 from app.schemas.itinerary import GeneratedItinerary, TripPlanningContext
 from app.schemas.weather import WeatherPlanningContext
 
 logger = logging.getLogger("nomvira.itinerary")
+GEMINI_ATTEMPT_TIMEOUT_SECONDS = 60
+GEMINI_MAX_OUTPUT_TOKENS = 6144
+
 MESSAGE = "AI planning is temporarily unavailable. Your trip and previous itinerary are safe."
+
+
+# Keep Gemini's generation schema intentionally simple.
+# GeneratedItinerary performs strict validation after generation.
+GEMINI_ITINERARY_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "days": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "date": {
+                        "type": "string",
+                        "format": "date",
+                    },
+                    "day_number": {
+                        "type": "integer",
+                    },
+                    "theme": {
+                        "type": "string",
+                        "enum": [
+                            "discovery",
+                            "culture",
+                            "nature",
+                            "mixed",
+                            "relaxation",
+                        ],
+                    },
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "properties": {
+                                "candidate_type": {
+                                    "type": "string",
+                                    "enum": [
+                                        "attraction",
+                                        "food",
+                                        "hotel",
+                                        "free_time",
+                                    ],
+                                },
+                                "candidate_id": {
+                                    "anyOf": [
+                                        {"type": "string"},
+                                        {"type": "null"},
+                                    ],
+                                },
+                                "period": {
+                                    "type": "string",
+                                    "enum": [
+                                        "morning",
+                                        "afternoon",
+                                        "evening",
+                                    ],
+                                },
+                                "reason_code": {
+                                    "type": "string",
+                                    "enum": [
+                                        "interest_match",
+                                        "area_grouping",
+                                        "pace_balance",
+                                        "food_option",
+                                        "selected_stay",
+                                        "free_time",
+                                    ],
+                                },
+                            },
+                            "required": [
+                                "candidate_type",
+                                "candidate_id",
+                                "period",
+                                "reason_code",
+                            ],
+                        },
+                    },
+                },
+                "required": [
+                    "date",
+                    "day_number",
+                    "theme",
+                    "items",
+                ],
+            },
+        },
+        "warnings": {
+            "type": "array",
+            "items": {
+                "type": "string",
+                "enum": [
+                    "insufficient_candidates",
+                ],
+            },
+        },
+    },
+    "required": [
+        "days",
+    ],
+}
 
 
 class GeminiLLMProvider(LLMProvider):
@@ -25,73 +133,170 @@ class GeminiLLMProvider(LLMProvider):
 
     async def generate_itinerary(
         self,
-        context: TripPlanningContext,
+        context: TripPlanningContext | WeatherPlanningContext,
         *,
         previous: GeneratedItinerary | None = None,
         validation_errors: list[str] | None = None,
     ) -> GeneratedItinerary:
         key = self.settings.gemini_api_key.get_secret_value()
+
         if not key:
-            raise AppError("ITINERARY_CONFIGURATION_ERROR", MESSAGE, 503)
-        content = {"planning_context": context.model_dump(mode="json", exclude={"trip_id"})}
+            raise AppError(
+                "ITINERARY_CONFIGURATION_ERROR",
+                MESSAGE,
+                503,
+            )
+
+        content = {"planning_context": compact_planning_context(context)}
+
         if previous is not None:
             content["repair"] = {
                 "previous": previous.model_dump(mode="json"),
                 "errors": validation_errors or [],
             }
+
+        model = self.settings.gemini_itinerary_model
+        system_prompt = (
+            WEATHER_SYSTEM_PROMPT if isinstance(context, WeatherPlanningContext) else SYSTEM_PROMPT
+        )
+        prompt = json.dumps(content, ensure_ascii=False, separators=(",", ":"))
+        logger.info(
+            "itinerary_provider_started model=%s trip_days=%d attraction_count=%d "
+            "food_count=%d proximity_pair_count=%d prompt_bytes=%d",
+            model,
+            len(context.dates),
+            len(context.attractions),
+            len(context.food),
+            len(context.proximity),
+            len(system_prompt.encode("utf-8")) + len(prompt.encode("utf-8")),
+        )
+        started = time.monotonic()
+
         try:
-            # Disable SDK HTTP retries. The service alone owns the one semantic repair.
+            # Do NOT set HttpOptions.timeout here.
+            #
+            # Setting timeout=90_000 caused the Gemini request itself to
+            # receive a ~90 second server deadline and return
+            # DEADLINE_EXCEEDED.
+            #
+            # The application-level asyncio timeout below remains the
+            # authoritative timeout for one Gemini generation attempt.
             async with genai.Client(
                 api_key=key,
                 enterprise=False,
                 vertexai=False,
                 http_options=types.HttpOptions(
-                    timeout=30_000, retry_options=types.HttpRetryOptions(attempts=1)
+                    retry_options=types.HttpRetryOptions(
+                        attempts=1,
+                    ),
                 ),
             ).aio as client:
-                async with asyncio.timeout(30):
+                async with asyncio.timeout(GEMINI_ATTEMPT_TIMEOUT_SECONDS):
                     response = await client.models.generate_content(
-                        model=self.settings.gemini_model,
-                        contents=json.dumps(content, ensure_ascii=False),
+                        model=model,
+                        contents=prompt,
                         config=types.GenerateContentConfig(
-                            system_instruction=WEATHER_SYSTEM_PROMPT
-                            if isinstance(context, WeatherPlanningContext)
-                            else SYSTEM_PROMPT,
+                            system_instruction=system_prompt,
                             response_mime_type="application/json",
-                            response_schema=GeneratedItinerary,
-                            temperature=0.2,
-                            max_output_tokens=12000,
-                            automatic_function_calling=types.AutomaticFunctionCallingConfig(
-                                disable=True
+                            response_json_schema=GEMINI_ITINERARY_SCHEMA,
+                            thinking_config=types.ThinkingConfig(
+                                thinking_level="minimal" if model == "gemini-3.6-flash" else "low",
                             ),
+                            max_output_tokens=GEMINI_MAX_OUTPUT_TOKENS,
                         ),
                     )
+
             text = response.text
-            if not isinstance(text, str) or len(text.encode()) > 100_000:
-                raise ValueError
+
+            if not isinstance(text, str):
+                logger.warning("itinerary_provider_invalid_response reason=response_text_missing")
+                raise ValueError("Gemini response did not contain text.")
+
+            response_bytes = len(text.encode("utf-8"))
+            logger.info(
+                "itinerary_provider_completed elapsed_ms=%d response_bytes=%d",
+                (time.monotonic() - started) * 1000,
+                response_bytes,
+            )
+            if response_bytes > 100_000:
+                logger.warning("itinerary_provider_invalid_response reason=response_too_large")
+                raise ValueError("Gemini response exceeded maximum size.")
+
+            # Strict application-side Pydantic validation.
             return GeneratedItinerary.model_validate_json(text)
+
         except errors.APIError as error:
             status = error.code
-            logger.warning("itinerary_provider_failed status=%s", status)
-            code = (
-                "ITINERARY_PROVIDER_RATE_LIMITED"
-                if status == 429
-                else "ITINERARY_PROVIDER_AUTH_ERROR"
-                if status in (401, 403)
-                else "ITINERARY_CONFIGURATION_ERROR"
-                if status in (400, 404)
-                else "ITINERARY_PROVIDER_UNAVAILABLE"
+
+            logger.warning(
+                "itinerary_provider_failed status=%s",
+                status,
             )
-            raise AppError(code, MESSAGE, 429 if status == 429 else 503) from None
+
+            if status == 429:
+                code = "ITINERARY_PROVIDER_RATE_LIMITED"
+                http_status = 429
+
+            elif status in (401, 403):
+                code = "ITINERARY_PROVIDER_AUTH_ERROR"
+                http_status = 503
+
+            elif status in (400, 404):
+                code = "ITINERARY_CONFIGURATION_ERROR"
+                http_status = 503
+
+            elif status in (408, 504):
+                code = "ITINERARY_PROVIDER_TIMEOUT"
+                http_status = 503
+
+            else:
+                code = "ITINERARY_PROVIDER_UNAVAILABLE"
+                http_status = 503
+
+            raise AppError(
+                code,
+                MESSAGE,
+                http_status,
+            ) from None
+
         except (TimeoutError, httpx.TimeoutException):
             logger.warning("itinerary_provider_timeout")
-            raise AppError("ITINERARY_PROVIDER_TIMEOUT", MESSAGE, 503) from None
-        except (ValidationError, ValueError, TypeError):
-            logger.warning("itinerary_provider_invalid_response")
-            raise AppError("ITINERARY_PROVIDER_INVALID_RESPONSE", MESSAGE, 502) from None
+
+            raise AppError(
+                "ITINERARY_PROVIDER_TIMEOUT",
+                MESSAGE,
+                503,
+            ) from None
+
+        except (ValidationError, ValueError, TypeError) as error:
+            logger.warning(
+                "itinerary_provider_invalid_response error_type=%s",
+                type(error).__name__,
+            )
+
+            raise AppError(
+                "ITINERARY_PROVIDER_INVALID_RESPONSE",
+                MESSAGE,
+                502,
+            ) from None
+
         except httpx.RequestError:
             logger.warning("itinerary_provider_unavailable")
-            raise AppError("ITINERARY_PROVIDER_UNAVAILABLE", MESSAGE, 503) from None
-        except Exception:
-            logger.warning("itinerary_provider_failed reason=unexpected")
-            raise AppError("ITINERARY_PROVIDER_UNAVAILABLE", MESSAGE, 503) from None
+
+            raise AppError(
+                "ITINERARY_PROVIDER_UNAVAILABLE",
+                MESSAGE,
+                503,
+            ) from None
+
+        except Exception as error:
+            logger.warning(
+                "itinerary_provider_failed reason=unexpected error_type=%s",
+                type(error).__name__,
+            )
+
+            raise AppError(
+                "ITINERARY_PROVIDER_UNAVAILABLE",
+                MESSAGE,
+                503,
+            ) from None

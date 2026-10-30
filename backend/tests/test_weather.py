@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 import httpx
 import pytest
 from pydantic import ValidationError
-from test_itineraries import KEY, USER, ScriptedProvider, planning, sdk_transport
+from test_itineraries import KEY, USER, ScriptedProvider, dense_planning, planning, sdk_transport
 
 from app.core.config import Settings
 from app.core.errors import AppError
@@ -420,6 +420,21 @@ async def test_successful_adaptation_reuses_provider_and_preserves_original_and_
     assert result.itinerary.days[0].items[0].candidate_id == "node/4"
     assert not result.remaining_conflicts and original.model_dump_json() == before
     assert len(provider.calls) == 1
+
+
+async def test_weather_adaptation_preserves_original_ids_outside_generation_shortlist():
+    req, original, _, _, weather = adaptation_fixture()
+    req.context = dense_planning(
+        start_date=req.context.start_date, end_date=req.context.end_date, timezone="UTC"
+    )
+    fixed = original.model_copy(deep=True)
+    fixed.days[0].items[0].candidate_id = "node/30"  # Supplied indoor alternative.
+    provider = ScriptedProvider([fixed])
+    engine = ItineraryGenerationService(Settings(_env_file=None), provider)
+    result = await WeatherAdaptationService(weather, engine).adapt(req)
+    assert result.changed and len(provider.calls) == 1
+    assert result.itinerary.days[1].items[0].candidate_id == "node/2"
+    assert result.itinerary.days[2].items[0].candidate_id == "node/3"
 
 
 @pytest.mark.parametrize("case", ["unknown", "date", "capacity", "unaffected", "uncovered", "food"])

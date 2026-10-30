@@ -79,7 +79,8 @@ export async function buildTrustedPlanningInput(db: DB, trip: TripWithInterests)
       return { candidate_id: s.provider_place_id, provider: "geoapify", name: s.name, category: s.category,
         cuisine_types: recent?.cuisine_types ?? [], dietary_tags: recent?.dietary_tags ?? [],
         dietary_conflicts: recent?.dietary_conflicts ?? [], latitude: recent?.latitude ?? null,
-        longitude: recent?.longitude ?? null, distance_km: recent?.distance_km ?? null };
+        longitude: recent?.longitude ?? null, distance_km: recent?.distance_km ?? null,
+        recommendation_score: recent?.recommendation_score ?? null };
     }),
     hotel: selectedHotel ? { candidate_id: selectedHotel.id, provider: "stayapi", provider_accommodation_id: selectedHotel.provider_accommodation_id,
       name: details?.name ?? null, latitude: details?.latitude ?? null, longitude: details?.longitude ?? null,

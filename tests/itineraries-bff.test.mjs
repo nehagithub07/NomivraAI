@@ -23,7 +23,7 @@ function load(file, adapters = {}) {
       if (name === "@/lib/supabase/server") return { createClient: async () => adapters.db };
       if (name === "@/lib/destinations/persistence") return { getPersistedPlaces: async () => adapters.places ?? [place] };
       if (name === "@/lib/accommodations/server") return { getStaySelection: async () => null, getCachedHotels: () => null };
-      if (name === "@/lib/food/server") return { getFoodSelections: async () => adapters.food ?? [], getCachedFood: () => null };
+      if (name === "@/lib/food/server") return { getFoodSelections: async () => adapters.food ?? [], getCachedFood: () => adapters.cachedFood ?? null };
       if (name.startsWith("@/")) return moduleAt(path.resolve("src", `${name.slice(2)}.ts`));
       if (name.startsWith(".")) return moduleAt(path.resolve(path.dirname(filename), `${name}.ts`));
       return require(name);
@@ -89,6 +89,8 @@ test("itinerary BFF independently authenticates, verifies ownership/origin and r
 
 test("itinerary BFF uses only owned persisted candidates, signs the full validated document and reuses a ready version", async t => {
   configure(t); const { db, state } = database(); let calls = 0;
+  const timeouts = [];
+  t.mock.method(AbortSignal, "timeout", milliseconds => { timeouts.push(milliseconds); return new AbortController().signal; });
   t.mock.method(globalThis, "fetch", async (url, options) => {
     calls++; assert.equal(new URL(url).pathname, "/api/v1/itineraries/generate");
     assert.equal(options.headers["X-Nomvira-Internal-Key"], KEY); assert.equal(options.cache, "no-store");
@@ -96,14 +98,16 @@ test("itinerary BFF uses only owned persisted candidates, signs the full validat
     assert.equal(body.context.attractions[0].candidate_id, place.provider_place_id);
     assert.ok(!("owner_id" in body.context) && !("authorization" in body.context));
     assert.equal(body.context.food.length, 1); assert.equal(body.context.food[0].name, "Saved Real Cafe");
+    assert.equal(body.context.food[0].recommendation_score, 0.95);
     return Response.json(generationResult());
   });
-  const { POST } = load(route, { db, food: [{ provider: "geoapify", provider_place_id: "saved-food", name: "Saved Real Cafe", category: "cafe" }, { provider: "fixture", provider_place_id: "demo", name: "Demo", category: "cafe" }] });
+  const { POST } = load(route, { db, food: [{ provider: "geoapify", provider_place_id: "saved-food", name: "Saved Real Cafe", category: "cafe" }, { provider: "fixture", provider_place_id: "demo", name: "Demo", category: "cafe" }], cachedFood: { candidates: [{ provider: "geoapify", provider_place_id: "saved-food", recommendation_score: 0.95 }] } });
   const first = await invoke(POST); assert.equal(first.status, 200);
   assert.equal((await first.json()).itinerary.id, itineraryVersionId);
   assert.ok(state.filters.some(([table, key, value]) => table === "trips" && key === "owner_id" && value === itineraryTrip.owner_id));
   assert.equal(state.writes.filter(([name]) => name === "complete_itinerary_generation").length, 1);
   assert.equal((await invoke(POST)).status, 200); assert.equal(calls, 1);
+  assert.deepEqual(timeouts, [90_000]);
 });
 
 test("missing attractions stop before generation reservation or any LLM request", async t => {

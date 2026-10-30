@@ -62,6 +62,7 @@ class PlanningFood(StrictModel):
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
     distance_km: float | None = Field(default=None, ge=0, le=40080)
+    recommendation_score: float | None = Field(default=None, ge=0, le=1)
 
 
 class PlanningHotel(StrictModel):

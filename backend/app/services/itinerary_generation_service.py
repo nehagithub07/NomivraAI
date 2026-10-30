@@ -14,6 +14,8 @@ from app.services.itinerary_context_service import build_planning_context
 from app.services.itinerary_validation_service import resolve_itinerary, semantic_errors
 
 logger = logging.getLogger("nomvira.itinerary")
+# Leave room for the weather endpoint's optional 12-second forecast inside its 90s BFF budget.
+GENERATION_TIMEOUT_SECONDS = 75
 
 
 class ItineraryGenerationService:
@@ -52,7 +54,7 @@ class ItineraryGenerationService:
                 self.events.popitem(last=False)
             logger.info("itinerary_generation_started provider=%s", self.settings.llm_provider)
             try:
-                async with asyncio.timeout(65):
+                async with asyncio.timeout(GENERATION_TIMEOUT_SECONDS):
                     plan = await self.provider.generate_itinerary(context)
                     failures = validate(plan, context)
                     repaired = bool(failures)
@@ -82,7 +84,9 @@ class ItineraryGenerationService:
             )
             return ItineraryGenerationResponse(
                 provider=self.settings.llm_provider,
-                model_name="deterministic-fixture-v1" if demo else self.settings.gemini_model,
+                model_name="deterministic-fixture-v1"
+                if demo
+                else self.settings.gemini_itinerary_model,
                 prompt_version=prompt_version,
                 demo=demo,
                 itinerary=document,
