@@ -23,18 +23,26 @@ def deployment_errors(settings: Settings) -> list[str]:
         if (
             len(value) < minimum
             or any(char.isspace() for char in value)
-            or any(marker in value.upper() for marker in ("YOUR_", "REPLACE_", "<", ">"))
+            or any(
+                marker in value.upper() for marker in ("YOUR_", "REPLACE_", "<", ">")
+            )
         ):
-            errors.append(f"{name.upper()} must contain a configured private credential.")
-    if settings.accommodation_provider != "stayapi" or settings.allow_demo_accommodations:
-        errors.append("Use ACCOMMODATION_PROVIDER=stayapi and ALLOW_DEMO_ACCOMMODATIONS=false.")
-    if settings.food_provider != "geoapify":
-        errors.append("Use FOOD_PROVIDER=geoapify in production.")
+            errors.append(
+                f"{name.upper()} must contain a configured private credential."
+            )
+    if (
+        settings.accommodation_provider != "stayapi"
+        or settings.allow_demo_accommodations
+    ):
+        errors.append(
+            "Use ACCOMMODATION_PROVIDER=stayapi and ALLOW_DEMO_ACCOMMODATIONS=false."
+        )
+    if settings.food_provider not in {"google_maps", "geoapify"}:
+        errors.append("Use FOOD_PROVIDER=google_maps or geoapify in production.")
     if settings.llm_provider != "gemini":
         errors.append("Use LLM_PROVIDER=gemini in production.")
     if settings.routing_provider != "openrouteservice":
-         errors.append("Use ROUTING_PROVIDER=openrouteservice in production."
-    )
+        errors.append("Use ROUTING_PROVIDER=openrouteservice in production.")
     for name in (
         "frontend_origin",
         "open_meteo_geocoding_url",
@@ -47,7 +55,8 @@ def deployment_errors(settings: Settings) -> list[str]:
         if (
             url.scheme != "https"
             or not url.hostname
-            or url.hostname in ("localhost", "127.0.0.1", "::1", "0.0.0.0", "example.com")
+            or url.hostname
+            in ("localhost", "127.0.0.1", "::1", "0.0.0.0", "example.com")
             or url.hostname.endswith((".localhost", ".example"))
             or url.username
             or url.password
@@ -55,7 +64,9 @@ def deployment_errors(settings: Settings) -> list[str]:
             or url.fragment
             or (name == "frontend_origin" and url.path not in ("", "/"))
         ):
-            errors.append(f"{name.upper()} must use a deployed HTTPS URL without credentials.")
+            errors.append(
+                f"{name.upper()} must use a deployed HTTPS URL without credentials."
+            )
     return errors
 
 

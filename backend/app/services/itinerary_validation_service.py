@@ -27,7 +27,9 @@ CATEGORY_INTERESTS = {
 }
 
 
-def semantic_errors(plan: GeneratedItinerary, context: TripPlanningContext) -> list[str]:
+def semantic_errors(
+    plan: GeneratedItinerary, context: TripPlanningContext
+) -> list[str]:
     errors = []
     attractions = {item.candidate_id: item for item in context.attractions}
     food = {item.candidate_id: item for item in context.food}
@@ -42,6 +44,8 @@ def semantic_errors(plan: GeneratedItinerary, context: TripPlanningContext) -> l
         ):
             errors.append("periods_must_be_ordered")
         kinds = [item.candidate_type for item in day.items]
+        if len(attractions) >= len(context.dates) and "attraction" not in kinds:
+            errors.append("daily_attraction_required")
         if kinds.count("attraction") > context.max_attractions_per_day:
             errors.append("daily_attraction_capacity_exceeded")
         if kinds.count("food") > 2 or kinds.count("hotel") > 1:
@@ -58,7 +62,11 @@ def semantic_errors(plan: GeneratedItinerary, context: TripPlanningContext) -> l
                 if item.candidate_id in seen:
                     errors.append("duplicate_attraction")
                 seen.add(item.candidate_id)
-                if item.reason_code not in ("interest_match", "area_grouping", "pace_balance"):
+                if item.reason_code not in (
+                    "interest_match",
+                    "area_grouping",
+                    "pace_balance",
+                ):
                     errors.append("invalid_attraction_reason")
             elif item.candidate_type == "food":
                 if item.candidate_id not in food:
@@ -69,7 +77,9 @@ def semantic_errors(plan: GeneratedItinerary, context: TripPlanningContext) -> l
                 if item.reason_code != "food_option":
                     errors.append("invalid_food_reason")
             elif item.candidate_type == "hotel":
-                if not context.hotel or item.candidate_id != str(context.hotel.candidate_id):
+                if not context.hotel or item.candidate_id != str(
+                    context.hotel.candidate_id
+                ):
                     errors.append("hotel_must_match_selected_accommodation")
                 if item.reason_code != "selected_stay":
                     errors.append("invalid_hotel_reason")
@@ -80,7 +90,9 @@ def semantic_errors(plan: GeneratedItinerary, context: TripPlanningContext) -> l
     return sorted(set(errors))
 
 
-def resolve_itinerary(plan: GeneratedItinerary, context: TripPlanningContext) -> ItineraryDocument:
+def resolve_itinerary(
+    plan: GeneratedItinerary, context: TripPlanningContext
+) -> ItineraryDocument:
     attractions = {item.candidate_id: item for item in context.attractions}
     food = {item.candidate_id: item for item in context.food}
     days = []
@@ -91,9 +103,7 @@ def resolve_itinerary(plan: GeneratedItinerary, context: TripPlanningContext) ->
             source = (
                 attractions[item.candidate_id]
                 if kind == "attraction"
-                else food[item.candidate_id]
-                if kind == "food"
-                else None
+                else food[item.candidate_id] if kind == "food" else None
             )
             items.append(
                 ResolvedItem(
@@ -101,25 +111,31 @@ def resolve_itinerary(plan: GeneratedItinerary, context: TripPlanningContext) ->
                     candidate_id=item.candidate_id,
                     candidate_provider={
                         "attraction": "openstreetmap",
-                        "food": "geoapify",
+                        "food": source.provider if kind == "food" else "geoapify",
                         "hotel": "stayapi",
                         "free_time": None,
                     }[kind],
                     period=item.period,
-                    title=source.name
-                    if source
-                    else "Selected accommodation"
-                    if kind == "hotel"
-                    else "Free time",
+                    title=(
+                        source.name
+                        if source
+                        else (
+                            "Selected accommodation" if kind == "hotel" else "Free time"
+                        )
+                    ),
                     reason=REASONS[item.reason_code],
-                    notes="Confirm opening hours before visiting."
-                    if kind == "attraction"
-                    else None,
+                    notes=(
+                        "Confirm opening hours before visiting."
+                        if kind == "attraction"
+                        else None
+                    ),
                     category=source.category if source else None,
                     # Preserve retention: only OSM facts and saved food names/categories persist.
                     latitude=source.latitude if kind == "attraction" else None,
                     longitude=source.longitude if kind == "attraction" else None,
-                    opening_hours=source.opening_hours if kind == "attraction" else None,
+                    opening_hours=(
+                        source.opening_hours if kind == "attraction" else None
+                    ),
                 )
             )
         days.append(
@@ -130,9 +146,15 @@ def resolve_itinerary(plan: GeneratedItinerary, context: TripPlanningContext) ->
                 items=items,
             )
         )
+    warnings = list(context.warnings)
+    if "insufficient_candidates" in plan.warnings:
+        warnings.append(
+            "There were not enough saved places to fill the itinerary, "
+            "so some free time may be included."
+        )
     return ItineraryDocument(
         title=f"Your {context.destination_name} itinerary",
         summary=f"A {len(days)}-day plan using your saved places and {context.travel_pace} pace.",
         days=days,
-        warnings=context.warnings,
+        warnings=warnings,
     )

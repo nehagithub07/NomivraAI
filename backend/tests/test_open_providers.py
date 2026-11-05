@@ -7,7 +7,7 @@ import pytest
 from app.core.config import Settings
 from app.main import create_app
 from app.providers.geocoding.open_meteo import OpenMeteoGeocodingProvider
-from app.providers.places.overpass import category_for, haversine_km
+from app.providers.places.overpass import category_for, haversine_km, normalize_elements
 
 KEY = "test-internal-application-key-never-real"
 HEADERS = {"X-Nomvira-Internal-Key": KEY}
@@ -29,7 +29,15 @@ LOCATION = {
 @contextmanager
 def client(handler, **settings):
     app = create_app(
-        Settings(_env_file=None, nomvira_internal_api_key=KEY, **settings),
+        Settings(
+            _env_file=None,
+            nomvira_internal_api_key=KEY,
+            **{
+                "overpass_api_url": "https://overpass-api.de/api/interpreter",
+                "provider_user_agent": "NomviraAI/0.1",
+                **settings,
+            },
+        ),
         httpx.MockTransport(handler),
     )
     with asyncio.Runner() as runner:
@@ -78,7 +86,9 @@ def test_provider_routes_require_internal_authentication(key):
         assert api.get("/api/v1/destinations/search?q=Tokyo", headers=headers).status_code == 401
         assert (
             api.post(
-                "/api/v1/places/discover", headers=headers, json={"latitude": 0, "longitude": 0}
+                "/api/v1/places/discover",
+                headers=headers,
+                json={"latitude": 0, "longitude": 0},
             ).status_code
             == 401
         )
@@ -126,7 +136,8 @@ def test_search_normalizes_localization_optional_fields_and_country_filter():
 
     with client(handler) as api:
         response = api.get(
-            "/api/v1/destinations/search?q=Tok&language=ja&country_code=JP", headers=HEADERS
+            "/api/v1/destinations/search?q=Tok&language=ja&country_code=JP",
+            headers=HEADERS,
         )
         assert response.status_code == 200
         data = response.json()["destinations"]
@@ -196,7 +207,12 @@ def test_geocoding_error_mapping(status, expected, code):
 
 @pytest.mark.parametrize(
     "payload",
-    [[], {"results": None}, {"results": [{"id": 123}]}, {"error": True, "reason": "PRIVATE ERROR"}],
+    [
+        [],
+        {"results": None},
+        {"results": [{"id": 123}]},
+        {"error": True, "reason": "PRIVATE ERROR"},
+    ],
 )
 def test_invalid_geocoding_response(payload):
     with client(lambda _: httpx.Response(200, json=payload)) as api:
@@ -238,9 +254,9 @@ def test_node_way_relation_normalization_dedupe_distance_and_metadata():
 
         query = parse_qs(request.content.decode())["data"][0]
         assert "around:" not in query
-        assert "[timeout:25]" in query
-        assert "[maxsize:33554432]" in query
-        assert "out center qt 50;" in query
+        assert "[timeout:10]" in query
+        assert "[maxsize:16777216]" in query
+        assert "out center qt 500;" in query
         assert 'nwr["tourism"' in query
         assert 'nwr["historic"' in query
         assert "restaurant" not in query
@@ -249,7 +265,13 @@ def test_node_way_relation_normalization_dedupe_distance_and_metadata():
             200,
             json={
                 "elements": [
-                    element(tags={"tourism": "museum", "phone": "PRIVATE", "wikidata": "Q123"}),
+                    element(
+                        tags={
+                            "tourism": "museum",
+                            "phone": "PRIVATE",
+                            "wikidata": "Q123",
+                        }
+                    ),
                     element(),
                     element("way", 2, "Park", {"leisure": "park"}, 35.7),
                     element("relation", 3, "Castle", {"historic": "castle"}, 35.71),
@@ -274,13 +296,62 @@ def test_node_way_relation_normalization_dedupe_distance_and_metadata():
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["radius_meters"] == 5000
+        assert data["radius_meters"] == 30000
         places = data["places"]
-        assert [item["provider_place_id"] for item in places] == ["node/1", "way/2", "relation/3"]
-        assert [item["category"] for item in places] == ["museum", "park", "historic"]
+        assert [item["provider_place_id"] for item in places] == [
+            "node/1",
+            "relation/3",
+            "way/2",
+        ]
+        assert [item["category"] for item in places] == ["museum", "historic", "park"]
         assert places[0]["tags"] == {"tourism": "museum", "wikidata": "Q123"}
         assert all(item["distance_km"] >= 0 for item in places)
         assert "PRIVATE" not in response.text
+
+
+def test_normalization_caps_notable_places_and_fills_with_nearby_candidates():
+    elements = [
+        element(
+            identifier=index,
+            name=f"Notable {index}",
+            tags={"tourism": "attraction", "wikidata": f"Q{index}"},
+            lat=35.69 + index * 0.003,
+        )
+        for index in range(1, 17)
+    ]
+    elements.extend(
+        element(
+            identifier=100 + index,
+            name=f"Nearby {index}",
+            tags={"leisure": "park"},
+            lat=35.74 + index * 0.003,
+        )
+        for index in range(1, 21)
+    )
+
+    places = normalize_elements(
+        {"elements": elements},
+        latitude=35.69,
+        longitude=139.69,
+        radius=15000,
+        limit=30,
+    )
+    ids = [place.provider_place_id for place in places]
+    notable = [place for place in places if place.tags.get("wikidata")]
+
+    assert len(places) == 30
+    assert len(notable) == 16
+    assert any(place.name.startswith("Nearby ") for place in places)
+    assert ids == [
+        place.provider_place_id
+        for place in normalize_elements(
+            {"elements": elements},
+            latitude=35.69,
+            longitude=139.69,
+            radius=15000,
+            limit=30,
+        )
+    ]
 
 
 @pytest.mark.parametrize(
@@ -309,7 +380,7 @@ def test_haversine_known_distance_same_point_and_antimeridian():
 @pytest.mark.parametrize(
     "changes",
     [
-        {"radius_meters": 20001},
+        {"radius_meters": 30001},
         {"limit": 31},
         {"latitude": 91},
         {"longitude": -181},
@@ -332,7 +403,9 @@ def test_discovery_bounds(changes):
 def test_overpass_errors_are_safe(status):
     with client(lambda _: httpx.Response(status, text="PRIVATE ERROR")) as api:
         response = api.post(
-            "/api/v1/places/discover", headers=HEADERS, json={"latitude": 0, "longitude": 0}
+            "/api/v1/places/discover",
+            headers=HEADERS,
+            json={"latitude": 0, "longitude": 0},
         )
         assert response.status_code == (429 if status == 429 else 503)
         assert "PRIVATE" not in response.text
@@ -355,23 +428,115 @@ def test_overpass_timeout_empty_result_and_partial_error():
         with client(handler) as api:
             assert (
                 api.post(
-                    "/api/v1/places/discover", headers=HEADERS, json={"latitude": 0, "longitude": 0}
+                    "/api/v1/places/discover",
+                    headers=HEADERS,
+                    json={"latitude": 0, "longitude": 0},
                 ).status_code
                 == expected
             )
+
+
+def test_geoapify_fallback_returns_only_verified_osm_places():
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        if request.url.path == "/v2/places":
+            assert request.url.params["apiKey"] == "test-geoapify-key"
+            assert request.url.params["categories"] == (
+                "tourism.sights,entertainment.museum,entertainment.theme_park,entertainment.zoo"
+            )
+            return httpx.Response(
+                200,
+                json={
+                    "features": [
+                        {
+                            "properties": {
+                                "name": "Geo Museum",
+                                "lat": 35.69,
+                                "lon": 139.69,
+                                "datasource": {
+                                    "raw": {
+                                        "osm_id": 123,
+                                        "osm_type": "n",
+                                        "tourism": "museum",
+                                        "wikidata": "Q123",
+                                    }
+                                },
+                            }
+                        },
+                        {
+                            "properties": {
+                                "name": "Unverifiable place",
+                                "lat": 35.69,
+                                "lon": 139.69,
+                                "datasource": {"raw": {}},
+                            }
+                        },
+                    ]
+                },
+            )
+        return httpx.Response(504, text="PRIVATE Overpass error")
+
+    with client(
+        handler,
+        geoapify_api_key="test-geoapify-key",
+    ) as api:
+        response = api.post(
+            "/api/v1/places/discover",
+            headers=HEADERS,
+            json={"latitude": 35.6895, "longitude": 139.6917},
+        )
+
+    assert response.status_code == 200
+    places = response.json()["places"]
+    assert len(places) == 1
+    assert places[0]["provider"] == "openstreetmap"
+    assert places[0]["provider_place_id"] == "node/123"
+    assert places[0]["name"] == "Geo Museum"
+    assert places[0]["category"] == "museum"
+    assert places[0]["tags"]["wikidata"] == "Q123"
+    assert len(calls) == 1
+
+
+def test_geoapify_fallback_failure_is_safe():
+    def handler(request):
+        if request.url.path == "/v2/places":
+            assert request.url.params["apiKey"] == "test-geoapify-key"
+            return httpx.Response(403, text="PRIVATE invalid API key")
+        return httpx.Response(504, text="PRIVATE Overpass error")
+
+    with client(
+        handler,
+        geoapify_api_key="test-geoapify-key",
+    ) as api:
+        response = api.post(
+            "/api/v1/places/discover",
+            headers=HEADERS,
+            json={"latitude": 0, "longitude": 0},
+        )
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "PLACES_PROVIDER_UNAVAILABLE"
+    assert "PRIVATE" not in response.text
+    assert "test-geoapify-key" not in response.text
 
 
 def test_rapid_sequential_discovery_succeeds_and_geocoding_limit_is_unchanged():
     with client(lambda _: httpx.Response(200, json={"elements": []})) as api:
         assert (
             api.post(
-                "/api/v1/places/discover", headers=HEADERS, json={"latitude": 0, "longitude": 0}
+                "/api/v1/places/discover",
+                headers=HEADERS,
+                json={"latitude": 0, "longitude": 0},
             ).status_code
             == 200
         )
         assert (
             api.post(
-                "/api/v1/places/discover", headers=HEADERS, json={"latitude": 0, "longitude": 0}
+                "/api/v1/places/discover",
+                headers=HEADERS,
+                json={"latitude": 0, "longitude": 0},
             ).status_code
             == 200
         )
@@ -425,7 +590,8 @@ async def test_concurrent_discovery_never_sends_parallel_provider_requests():
         return httpx.Response(200, json={"elements": []})
 
     app = create_app(
-        Settings(_env_file=None, nomvira_internal_api_key=KEY), httpx.MockTransport(handler)
+        Settings(_env_file=None, nomvira_internal_api_key=KEY),
+        httpx.MockTransport(handler),
     )
     app.state.limits.discovery_cooldown_seconds = 0.01
     async with (
@@ -434,14 +600,18 @@ async def test_concurrent_discovery_never_sends_parallel_provider_requests():
     ):
         first = asyncio.create_task(
             api.post(
-                "/api/v1/places/discover", headers=HEADERS, json={"latitude": 0, "longitude": 0}
+                "/api/v1/places/discover",
+                headers=HEADERS,
+                json={"latitude": 0, "longitude": 0},
             )
         )
         await entered.wait()
         try:
             second = asyncio.create_task(
                 api.post(
-                    "/api/v1/places/discover", headers=HEADERS, json={"latitude": 0, "longitude": 0}
+                    "/api/v1/places/discover",
+                    headers=HEADERS,
+                    json={"latitude": 0, "longitude": 0},
                 )
             )
             await asyncio.sleep(0.01)

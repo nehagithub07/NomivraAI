@@ -80,7 +80,7 @@ test("food search uses canonical trip coordinates/diets, signs results and cache
   assert.ok(verifyProof(proof.payload, proof.signature, KEY)); assert.deepEqual(JSON.parse(proof.payload).context, foodContext(foodTrip));
   assert.ok(state.filters.some(([, key, value]) => key === "owner_id" && value === userId));
   assert.equal((await (await GET(request({}, "GET"), context())).json()).results.cached, true);
-  assert.equal((await (await POST(request({ radius_meters: 5000, dietary_preferences: ["vegetarian"], cuisine_preferences: [], strict_dietary: false }), context())).json()).results.cached, true);
+  assert.equal((await (await POST(request({ radius_meters: 10000, dietary_preferences: ["vegetarian"], cuisine_preferences: [], strict_dietary: false }), context())).json()).results.cached, true);
   assert.equal(calls, 1);
 });
 test("food BFF hides provider errors, rejects ratings and disables production fixtures", async t => {
@@ -88,11 +88,11 @@ test("food BFF hides provider errors, rejects ratings and disables production fi
   t.mock.method(globalThis, "fetch", async () => result ? Response.json(result) : Response.json({ error: { code: "FOOD_PROVIDER_RATE_LIMITED", message: "PRIVATE API KEY" } }, { status }));
   const { POST } = load(searchFile, { db });
   let response = await POST(request(), context()); assert.equal(response.status, 429); assert.ok(!(await response.text()).includes("PRIVATE"));
-  status = 200; result = foodResults(); result.candidates[0].rating = 4.7;
-  assert.equal((await POST(request(), context())).status, 503);
+  status = 200; result = foodResults(); result.candidates[0].rating = 3.7;
+  assert.equal((await POST(request(), context())).status, 502);
   result = foodResults({ provider: "fixture", demo: true }); result.candidates[0].provider = "fixture";
   process.env.NODE_ENV = "production";
-  assert.equal((await POST(request(), context())).status, 503);
+  assert.equal((await POST(request(), context())).status, 502);
   assert.equal((await POST(request({ demo: true }), context())).status, 503);
 });
 test("food saving supports multiple associations, duplicates and scoped removal", async t => {

@@ -3,7 +3,7 @@ import { z } from "zod";
 const itemSchema = z.object({
   candidate_type: z.enum(["attraction", "food", "hotel", "free_time"]),
   candidate_id: z.string().min(1).max(512).nullable(),
-  candidate_provider: z.enum(["openstreetmap", "geoapify", "stayapi"]).nullable(),
+  candidate_provider: z.enum(["openstreetmap", "geoapify", "google_maps", "stayapi"]).nullable(),
   period: z.enum(["morning", "afternoon", "evening"]),
   title: z.string().min(1).max(500), reason: z.string().max(300), notes: z.string().max(500).nullable(),
   category: z.string().max(80).nullable(), latitude: z.number().min(-90).max(90).nullable(),

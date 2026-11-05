@@ -58,7 +58,13 @@ def planning(**changes):
                 }
                 for i in range(1, 9)
             ],
-            "food": [{"candidate_id": "real-food-id", "name": "Saved Cafe", "category": "cafe"}],
+            "food": [
+                {
+                    "candidate_id": "real-food-id",
+                    "name": "Saved Cafe",
+                    "category": "cafe",
+                }
+            ],
             **changes,
         }
     )
@@ -110,16 +116,21 @@ def dense_planning(**changes):
 def test_context_shortlist_depends_on_duration_pace_and_has_hard_caps(
     days, pace, attraction_count, food_count
 ):
-    source = dense_planning(end_date=date(2099, 4, 12) + timedelta(days=days - 1), travel_pace=pace)
+    source = dense_planning(
+        end_date=date(2099, 4, 12) + timedelta(days=days - 1), travel_pace=pace
+    )
     context = build_planning_context(source)
     assert len(context.attractions) == attraction_count
     assert len(context.food) == food_count
     assert len(context.proximity) == 30
     selected = {item.candidate_id for item in context.attractions}
     assert all(
-        pair.first_id in selected and pair.second_id in selected for pair in context.proximity
+        pair.first_id in selected and pair.second_id in selected
+        for pair in context.proximity
     )
-    assert len(source.attractions) == 30 and len(source.food) == 20  # Input is unchanged.
+    assert (
+        len(source.attractions) == 30 and len(source.food) == 20
+    )  # Input is unchanged.
     if days == 14:
         assert any("unscheduled" in warning for warning in context.warnings)
 
@@ -137,9 +148,9 @@ def test_context_keeps_interest_matches_then_existing_distance_and_food_ranking(
     assert all(item in source.attractions for item in context.attractions)
     assert all(item in source.food for item in context.food)
     source.interests = ["nature"]
-    assert [item.candidate_id for item in build_planning_context(source).attractions] == [
-        f"node/{i}" for i in range(20, 6, -1)
-    ]
+    assert [
+        item.candidate_id for item in build_planning_context(source).attractions
+    ] == [f"node/{i}" for i in range(20, 6, -1)]
 
 
 def test_shortlisting_is_deterministic_for_ties_and_missing_food_scores():
@@ -196,7 +207,11 @@ def test_compact_context_substantially_reduces_full_candidate_prompt():
     )
     # The previous pipeline sent the nearest 60 pairs over all discovered attractions.
     full["proximity"] = [
-        {"first_id": a.candidate_id, "second_id": b.candidate_id, "straight_line_km": 0.1}
+        {
+            "first_id": a.candidate_id,
+            "second_id": b.candidate_id,
+            "straight_line_km": 0.1,
+        }
         for a, b in list(combinations(source.attractions, 2))[:60]
     ]
     for food in full["food"]:
@@ -250,7 +265,9 @@ async def test_valid_generation_uses_trusted_titles_and_no_invented_facts():
         if item.candidate_type == "attraction"
     )
     assert "prices" not in result.model_dump()
-    assert result.days[0].items[-1].latitude is None  # Food search metadata stays transient.
+    assert (
+        result.days[0].items[-1].latitude is None
+    )  # Food search metadata stays transient.
     assert result.title == "Your Tokyo itinerary"
 
 
@@ -299,12 +316,21 @@ async def test_dates_day_numbers_duplicates_and_period_order_are_validated():
     assert "dates_must_exactly_match_trip_in_order" in semantic_errors(plan, context)
 
 
-@pytest.mark.parametrize("pace,capacity", [("relaxed", 2), ("balanced", 3), ("packed", 4)])
+@pytest.mark.parametrize(
+    "pace,capacity", [("relaxed", 2), ("balanced", 3), ("packed", 4)]
+)
 async def test_daily_capacity_is_deterministic_and_enforced(pace, capacity):
     plan, context = await fixture_plan(planning(travel_pace=pace))
     assert context.max_attractions_per_day == capacity
     assert semantic_errors(plan, context) == []
-    plan.days[0].items.insert(1, plan.days[0].items[0].model_copy())
+    attraction = next(
+        item for item in plan.days[0].items if item.candidate_type == "attraction"
+    )
+    while (
+        sum(item.candidate_type == "attraction" for item in plan.days[0].items)
+        <= capacity
+    ):
+        plan.days[0].items.insert(1, attraction.model_copy())
     assert "daily_attraction_capacity_exceeded" in semantic_errors(plan, context)
 
 
@@ -357,7 +383,9 @@ async def test_one_semantic_repair_succeeds_and_never_retries_indefinitely():
     bad.days[0].items[0].candidate_id = "node/999999"
     provider = ScriptedProvider([bad, good])
     service = ItineraryGenerationService(Settings(_env_file=None), provider)
-    result = await service.generate(ItineraryGenerationRequest(user_id=USER, context=planning()))
+    result = await service.generate(
+        ItineraryGenerationRequest(user_id=USER, context=planning())
+    )
     assert result.prompt_version == ITINERARY_PROMPT_VERSION
     assert len(provider.calls) == 2
     assert provider.calls[1]["validation_errors"] == ["unknown_attraction_id"]
@@ -370,8 +398,12 @@ async def test_second_semantic_failure_returns_graceful_error_and_releases_slot(
     provider = ScriptedProvider([bad, bad])
     service = ItineraryGenerationService(Settings(_env_file=None), provider)
     with pytest.raises(AppError) as error:
-        await service.generate(ItineraryGenerationRequest(user_id=USER, context=planning()))
-    assert error.value.code == "ITINERARY_VALIDATION_FAILED" and len(provider.calls) == 2
+        await service.generate(
+            ItineraryGenerationRequest(user_id=USER, context=planning())
+        )
+    assert (
+        error.value.code == "ITINERARY_VALIDATION_FAILED" and len(provider.calls) == 2
+    )
     assert service.concurrent._value == 2
 
 
@@ -455,7 +487,10 @@ async def test_real_sdk_async_structured_request_uses_model_schema_and_no_auth_c
             json={
                 "candidates": [
                     {
-                        "content": {"role": "model", "parts": [{"text": plan.model_dump_json()}]},
+                        "content": {
+                            "role": "model",
+                            "parts": [{"text": plan.model_dump_json()}],
+                        },
                         "finishReason": "STOP",
                     }
                 ]
@@ -484,7 +519,9 @@ async def test_real_sdk_async_structured_request_uses_model_schema_and_no_auth_c
     text = payload["contents"][0]["parts"][0]["text"]
     assert "user_id" not in text and "trip_id" not in text
     assert "test-private-gemini-key" not in text and "tools" not in payload
-    expected_prompt_bytes = len(text.encode("utf-8")) + len(SYSTEM_PROMPT.encode("utf-8"))
+    expected_prompt_bytes = len(text.encode("utf-8")) + len(
+        SYSTEM_PROMPT.encode("utf-8")
+    )
     assert f"prompt_bytes={expected_prompt_bytes}" in caplog.text
     assert result.model_name == model
     assert "Never invent" in SYSTEM_PROMPT
@@ -499,12 +536,19 @@ async def test_real_sdk_async_structured_request_uses_model_schema_and_no_auth_c
         "response_bytes=",
     ):
         assert metric in caplog.text
-    assert f"response_bytes={len(plan.model_dump_json().encode('utf-8'))}" in caplog.text
-    assert "Provider Museum" not in caplog.text and "test-private-gemini-key" not in caplog.text
+    assert (
+        f"response_bytes={len(plan.model_dump_json().encode('utf-8'))}" in caplog.text
+    )
+    assert (
+        "Provider Museum" not in caplog.text
+        and "test-private-gemini-key" not in caplog.text
+    )
     assert "Include rest breaks" not in caplog.text and str(TRIP) not in caplog.text
 
 
-def test_itinerary_model_is_configured_separately_from_general_gemini_model(monkeypatch):
+def test_itinerary_model_is_configured_separately_from_general_gemini_model(
+    monkeypatch,
+):
     monkeypatch.setenv("GEMINI_MODEL", "future-companion-model")
     monkeypatch.delenv("GEMINI_ITINERARY_MODEL", raising=False)
     assert Settings(_env_file=None).gemini_itinerary_model == "gemini-3.6-flash"
@@ -530,7 +574,9 @@ def test_itinerary_model_is_configured_separately_from_general_gemini_model(monk
         (504, "ITINERARY_PROVIDER_TIMEOUT"),
     ],
 )
-async def test_provider_statuses_are_safe_and_not_retried(monkeypatch, caplog, status, code):
+async def test_provider_statuses_are_safe_and_not_retried(
+    monkeypatch, caplog, status, code
+):
     caplog.set_level(logging.INFO)
     calls = []
 
@@ -548,7 +594,11 @@ async def test_provider_statuses_are_safe_and_not_retried(monkeypatch, caplog, s
         ).generate_itinerary(context)
     assert error.value.code == code
     assert error.value.status_code == (429 if status == 429 else 503)
-    assert len(calls) == 1 and "PRIVATE" not in caplog.text and "PRIVATE" not in error.value.message
+    assert (
+        len(calls) == 1
+        and "PRIVATE" not in caplog.text
+        and "PRIVATE" not in error.value.message
+    )
 
 
 async def test_provider_timeout_is_mapped_without_retry(monkeypatch):
@@ -578,13 +628,17 @@ async def test_provider_failures_do_not_trigger_semantic_repair(code):
     provider = ScriptedProvider([AppError(code, "Safe failure", 503)])
     service = ItineraryGenerationService(Settings(_env_file=None), provider)
     with pytest.raises(AppError) as error:
-        await service.generate(ItineraryGenerationRequest(user_id=USER, context=planning()))
+        await service.generate(
+            ItineraryGenerationRequest(user_id=USER, context=planning())
+        )
     assert error.value.code == code and len(provider.calls) == 1
     assert provider.calls[0] == {} and service.concurrent._value == 2
 
 
 @pytest.mark.parametrize("timeout_scope", ["attempt", "generation"])
-async def test_elapsed_deadline_cancels_request_without_semantic_repair(monkeypatch, timeout_scope):
+async def test_elapsed_deadline_cancels_request_without_semantic_repair(
+    monkeypatch, timeout_scope
+):
     from app.providers.llm import gemini
     from app.services import itinerary_generation_service
 
@@ -601,18 +655,26 @@ async def test_elapsed_deadline_cancels_request_without_semantic_repair(monkeypa
     if timeout_scope == "attempt":
         monkeypatch.setattr(gemini, "GEMINI_ATTEMPT_TIMEOUT_SECONDS", 0.01)
     else:
-        monkeypatch.setattr(itinerary_generation_service, "GENERATION_TIMEOUT_SECONDS", 0.01)
+        monkeypatch.setattr(
+            itinerary_generation_service, "GENERATION_TIMEOUT_SECONDS", 0.01
+        )
     service = ItineraryGenerationService(
         Settings(_env_file=None, gemini_api_key="private-test-key")
     )
     with pytest.raises(AppError) as error:
-        await service.generate(ItineraryGenerationRequest(user_id=USER, context=planning()))
+        await service.generate(
+            ItineraryGenerationRequest(user_id=USER, context=planning())
+        )
     assert error.value.code == "ITINERARY_PROVIDER_TIMEOUT" and len(calls) == 1
     assert cancelled == [True] and service.concurrent._value == 2
 
 
-@pytest.mark.parametrize("text", ["not json", '{"days":[]}', '{"days":[],"prices":{"dinner":45}}'])
-async def test_malformed_or_factual_extra_output_is_rejected_without_repair(monkeypatch, text):
+@pytest.mark.parametrize(
+    "text", ["not json", '{"days":[]}', '{"days":[],"prices":{"dinner":45}}']
+)
+async def test_malformed_or_factual_extra_output_is_rejected_without_repair(
+    monkeypatch, text
+):
     from app.providers.llm import gemini
 
     class AsyncClient:
@@ -632,45 +694,66 @@ async def test_malformed_or_factual_extra_output_is_rejected_without_repair(monk
 
     client = AsyncClient()
     client.models = SimpleNamespace(generate_content=generate)
-    monkeypatch.setattr(gemini.genai, "Client", lambda **_kwargs: SimpleNamespace(aio=client))
-    service = ItineraryGenerationService(Settings(_env_file=None, gemini_api_key="test-key"))
+    monkeypatch.setattr(
+        gemini.genai, "Client", lambda **_kwargs: SimpleNamespace(aio=client)
+    )
+    service = ItineraryGenerationService(
+        Settings(_env_file=None, gemini_api_key="test-key")
+    )
     with pytest.raises(AppError) as error:
-        await service.generate(ItineraryGenerationRequest(user_id=USER, context=planning()))
+        await service.generate(
+            ItineraryGenerationRequest(user_id=USER, context=planning())
+        )
     assert error.value.code == "ITINERARY_PROVIDER_INVALID_RESPONSE" and len(calls) == 1
 
 
 async def test_missing_key_long_trips_and_provider_failures_are_bounded():
     _, context = await fixture_plan()
     with pytest.raises(AppError) as error:
-        await GeminiLLMProvider(Settings(_env_file=None, gemini_api_key="")).generate_itinerary(
-            context
-        )
+        await GeminiLLMProvider(
+            Settings(_env_file=None, gemini_api_key="")
+        ).generate_itinerary(context)
     assert error.value.code == "ITINERARY_CONFIGURATION_ERROR"
     with pytest.raises(AppError) as error:
         build_planning_context(planning(end_date="2099-05-15"))
     assert error.value.code == "ITINERARY_INVALID_TRIP"
     with pytest.raises(ValidationError):
-        PlanningInput.model_validate({**planning().model_dump(), "authorization": "PRIVATE"})
+        PlanningInput.model_validate(
+            {**planning().model_dump(), "authorization": "PRIVATE"}
+        )
 
 
 async def test_route_authentication_fixture_generation_and_duplicate_spend_limit():
     app = create_app(
         Settings(
-            _env_file=None, app_env="test", llm_provider="fixture", nomvira_internal_api_key=KEY
+            _env_file=None,
+            app_env="test",
+            llm_provider="fixture",
+            nomvira_internal_api_key=KEY,
         )
     )
-    body = ItineraryGenerationRequest(user_id=USER, context=planning()).model_dump(mode="json")
+    body = ItineraryGenerationRequest(user_id=USER, context=planning()).model_dump(
+        mode="json"
+    )
     async with (
         app.router.lifespan_context(app),
-        httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client,
+        httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client,
     ):
-        assert (await client.post("/api/v1/itineraries/generate", json=body)).status_code == 401
+        assert (
+            await client.post("/api/v1/itineraries/generate", json=body)
+        ).status_code == 401
         result = await client.post(
-            "/api/v1/itineraries/generate", json=body, headers={"X-Nomvira-Internal-Key": KEY}
+            "/api/v1/itineraries/generate",
+            json=body,
+            headers={"X-Nomvira-Internal-Key": KEY},
         )
         assert result.status_code == 200 and result.json()["demo"] is True
         duplicate = await client.post(
-            "/api/v1/itineraries/generate", json=body, headers={"X-Nomvira-Internal-Key": KEY}
+            "/api/v1/itineraries/generate",
+            json=body,
+            headers={"X-Nomvira-Internal-Key": KEY},
         )
         assert (
             duplicate.status_code == 429

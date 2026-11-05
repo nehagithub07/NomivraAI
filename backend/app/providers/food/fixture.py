@@ -8,7 +8,15 @@ class FixtureFoodProvider(FoodProvider):
 
     async def search(self, request: FoodSearchRequest) -> list[FoodCandidate]:
         rows = [
-            ("garden", "Demo Garden Kitchen", "restaurant", ["Indian"], ["vegetarian"], 1.2, True),
+            (
+                "garden",
+                "Demo Garden Kitchen",
+                "restaurant",
+                ["Indian"],
+                ["vegetarian"],
+                1.2,
+                True,
+            ),
             ("corner", "Demo Corner Table", "restaurant", ["Japanese"], [], 0.3, False),
             (
                 "green",
@@ -20,8 +28,24 @@ class FixtureFoodProvider(FoodProvider):
                 True,
             ),
             ("coffee", "Demo Morning Coffee", "cafe", [], ["vegan"], 0.5, False),
-            ("pasta", "Demo Pasta House", "restaurant", ["Italian"], ["vegetarian"], 2.1, True),
-            ("grill", "Demo Halal Grill", "restaurant", ["Indian"], ["halal"], 1.7, False),
+            (
+                "pasta",
+                "Demo Pasta House",
+                "restaurant",
+                ["Italian"],
+                ["vegetarian"],
+                2.1,
+                True,
+            ),
+            (
+                "grill",
+                "Demo Halal Grill",
+                "restaurant",
+                ["Indian"],
+                ["halal"],
+                1.7,
+                False,
+            ),
             ("tacos", "Demo Quick Tacos", "fast_food", ["Mexican"], [], 1.1, False),
             ("bar", "Demo Evening Bar", "bar", [], [], 0.7, True),
             ("pub", "Demo Local Pub", "pub", ["American"], [], 1.5, False),

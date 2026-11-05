@@ -1,6 +1,13 @@
 "use client";
 
-import { Coffee, MapPin, Martini, Utensils, Leaf } from "lucide-react";
+import {
+  Coffee,
+  MapPin,
+  Martini,
+  Utensils,
+  Leaf,
+  Star,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { foodCategoryLabels } from "@/lib/food/catalog";
 import type { FoodCandidate } from "@/lib/food/validation";
@@ -19,6 +26,25 @@ export function FoodCard({ food, saved, saving, disabled, onSave, onDetails, bad
     <div className="p-5"><h3 className="type-body font-semibold wrap-anywhere">{food.name}</h3><p className="type-small mt-1 text-muted-foreground wrap-anywhere">{[...food.cuisine_types, foodCategoryLabels[food.category]].join(" · ")}</p>
       <DietaryIndicators tags={food.dietary_tags} />
       {food.address && <p className="type-small mt-3 text-muted-foreground wrap-anywhere">{food.address}</p>}
+      {food.rating !== null && (
+      <p className="type-small mt-3 flex items-center gap-1.5 font-medium">
+        <Star
+          className="size-4"
+          aria-hidden="true"
+        />
+
+        {food.rating.toFixed(1)}
+        {" / 5"}
+
+        {food.review_count !== null && (
+          <span className="font-normal text-muted-foreground">
+            {" · "}
+            {food.review_count.toLocaleString()}
+            {" reviews"}
+          </span>
+         )}
+        </p>
+      )}
       {food.distance_km !== null && <p className="type-small mt-3 flex items-start gap-1.5 text-muted-foreground"><MapPin className="mt-0.5 size-4 shrink-0" aria-hidden="true" />{food.distance_km < 0.1 ? "Less than 0.1" : food.distance_km.toFixed(1)} km from destination center</p>}
       {badgesActive && food.labels.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{food.labels.filter(label => label !== "Best Match").map(label => <span key={label} className={`type-meta rounded-full px-2.5 py-1 font-medium ${label === "Nomivra Pick" ? "bg-accent text-accent-foreground" : "bg-surface-secondary"}`}>{label}</span>)}</div>}
       <div className="mt-5 flex flex-wrap gap-2 border-t pt-4"><Button variant="secondary" onClick={event => onDetails(event.currentTarget)}>Details</Button><Button onClick={onSave} disabled={disabled || saved} loading={saving}>{saved ? "Saved to trip" : "Save"}</Button></div>

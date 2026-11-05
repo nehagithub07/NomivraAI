@@ -70,6 +70,7 @@ Render prompts for these environment values. Enter them in the dashboard:
 | `STAYAPI_API_KEY` | Your live StayAPI key |
 | `GEOAPIFY_API_KEY` | Your Geoapify key |
 | `GEMINI_API_KEY` | Your private Gemini key; FastAPI only |
+| `OPENROUTESERVICE_API_KEY` | Your OpenRouteService routing key |
 
 The Blueprint sets `APP_ENV=production`, live accommodation/food providers, demo
 accommodations disabled, and the configurable Open-Meteo/Overpass endpoints.

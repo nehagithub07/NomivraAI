@@ -14,9 +14,15 @@ from app.schemas.budget import (
 
 # Integers make the allocation policy auditable; all money stays Decimal.
 ALLOCATION_PERCENTAGES = {
-    "budget": dict(accommodation=30, food=25, activities=15, transport=20, miscellaneous=10),
-    "balanced": dict(accommodation=35, food=25, activities=20, transport=12, miscellaneous=8),
-    "premium": dict(accommodation=45, food=25, activities=15, transport=10, miscellaneous=5),
+    "budget": dict(
+        accommodation=30, food=25, activities=15, transport=20, miscellaneous=10
+    ),
+    "balanced": dict(
+        accommodation=35, food=25, activities=20, transport=12, miscellaneous=8
+    ),
+    "premium": dict(
+        accommodation=45, food=25, activities=15, transport=10, miscellaneous=5
+    ),
 }
 assert all(sum(policy.values()) == 100 for policy in ALLOCATION_PERCENTAGES.values())
 CENT = Decimal("0.01")
@@ -33,11 +39,15 @@ def percent(used: Decimal, total: Decimal) -> Decimal:
 
 def validate_entry(body: ValidateBudgetEntryRequest):
     if body.currency != body.entry.currency:
-        raise AppError("BUDGET_CURRENCY_MISMATCH", "Use your trip's currency for expenses.", 422)
+        raise AppError(
+            "BUDGET_CURRENCY_MISMATCH", "Use your trip's currency for expenses.", 422
+        )
     return body.entry
 
 
-def summarize_budget(source: BudgetInput, *, now: datetime | None = None) -> TripBudgetSummary:
+def summarize_budget(
+    source: BudgetInput, *, now: datetime | None = None
+) -> TripBudgetSummary:
     now = now or datetime.now(UTC)
     warnings = [
         "Food and attraction prices are unknown unless you enter them. "
@@ -61,7 +71,9 @@ def _summarize(source: BudgetInput, now: datetime, today: date, warnings: list[s
         amount = (
             money(source.budget_total - allocated)
             if index == len(policy) - 1
-            else (source.budget_total * percentage / 100).quantize(CENT, rounding=ROUND_DOWN)
+            else (source.budget_total * percentage / 100).quantize(
+                CENT, rounding=ROUND_DOWN
+            )
         )
         allocated += amount
         allocations.append(
@@ -102,13 +114,19 @@ def _summarize(source: BudgetInput, now: datetime, today: date, warnings: list[s
 
     categories = []
     for allocation in allocations:
-        rows = [entry for entry in source.entries if entry.category == allocation.category]
+        rows = [
+            entry for entry in source.entries if entry.category == allocation.category
+        ]
         planned = money(
             sum((entry.amount for entry in rows if entry.entry_type == "planned"), ZERO)
         )
-        actual = money(sum((entry.amount for entry in rows if entry.entry_type == "actual"), ZERO))
+        actual = money(
+            sum((entry.amount for entry in rows if entry.entry_type == "actual"), ZERO)
+        )
         automatic = (
-            known.amount if allocation.category == "accommodation" and known.included else ZERO
+            known.amount
+            if allocation.category == "accommodation" and known.included
+            else ZERO
         )
         committed = automatic + planned + actual
         categories.append(
@@ -120,7 +138,9 @@ def _summarize(source: BudgetInput, now: datetime, today: date, warnings: list[s
                 actual=actual,
                 committed=committed,
                 remaining=allocation.amount - committed,
-                percent_used=percent(committed, allocation.amount) if allocation.amount else None,
+                percent_used=(
+                    percent(committed, allocation.amount) if allocation.amount else None
+                ),
             )
         )
     known_total = sum((c.known for c in categories), ZERO)
@@ -181,11 +201,11 @@ def _summarize(source: BudgetInput, now: datetime, today: date, warnings: list[s
             CENT, rounding=ROUND_DOWN
         ),
         recommended_daily_flexible_spend=daily,
-        daily_flexible_spend_per_traveler=(daily / source.travelers).quantize(
-            CENT, rounding=ROUND_DOWN
-        )
-        if daily is not None
-        else None,
+        daily_flexible_spend_per_traveler=(
+            (daily / source.travelers).quantize(CENT, rounding=ROUND_DOWN)
+            if daily is not None
+            else None
+        ),
         entries=source.entries,
         insights=insights,
         warnings=warnings,

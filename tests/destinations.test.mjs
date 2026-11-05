@@ -31,13 +31,14 @@ test("discovery response enforces radius, count, OSM IDs, coordinates and tag al
   const value = { latitude: 35.6, longitude: 139.6, radius_meters: 10000, places: [place] };
   assert.equal(discoveryResponseSchema.safeParse(value).success, true);
   assert.equal(discoveryResponseSchema.safeParse({ ...value, places: Array(31).fill(place) }).success, false);
-  assert.equal(discoveryResponseSchema.safeParse({ ...value, radius_meters: 20001 }).success, false);
+  assert.equal(discoveryResponseSchema.safeParse({ ...value, radius_meters: 30001 }).success, false);
   for (const changes of [{ latitude: 91 }, { provider_place_id: "123" }, { distance_km: -1 }, { tags: { phone: "private" } }]) assert.equal(discoveryResponseSchema.safeParse({ ...value, places: [{ ...place, ...changes }] }).success, false);
 });
 
 test("discovery errors explain recovery without showing arbitrary server details", () => {
   assert.match(discoveryErrorMessage("provider_unavailable"), /service is temporarily unavailable/);
   assert.match(discoveryErrorMessage("PLACES_PROVIDER_UNAVAILABLE"), /service is temporarily unavailable/);
+  assert.match(discoveryErrorMessage("PLACES_PROVIDER_READ_TIMEOUT"), /taking too long/);
   for (const code of ["PLACES_PROVIDER_CONNECT_TIMEOUT", "PLACES_PROVIDER_CONNECTION_ERROR"]) {
     assert.match(discoveryErrorMessage(code), /couldn't connect to the places provider/);
     assert.match(discoveryErrorMessage(code), /trip is saved/i);

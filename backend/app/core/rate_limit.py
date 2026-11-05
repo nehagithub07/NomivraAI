@@ -31,7 +31,9 @@ class ProviderLimits:
     def search(self) -> None:
         now = time.monotonic()
 
-        self.search_events = [instant for instant in self.search_events if now - instant < 60]
+        self.search_events = [
+            instant for instant in self.search_events if now - instant < 60
+        ]
 
         if len(self.search_events) >= 60:
             raise AppError(
@@ -61,13 +63,16 @@ class ProviderLimits:
             async with asyncio.timeout(self.discovery_wait_seconds):
                 await self.discovery_lock.acquire()
                 acquired = True
-                delay = self.discovery_cooldown_seconds - (time.monotonic() - self.last_discovery)
+                delay = self.discovery_cooldown_seconds - (
+                    time.monotonic() - self.last_discovery
+                )
                 if delay > 0:
                     await asyncio.sleep(delay)
             self._discovery_owner = asyncio.current_task()
             self.last_discovery = time.monotonic()
             logger.info(
-                "discovery_slot_acquired wait_ms=%d", (self.last_discovery - started) * 1000
+                "discovery_slot_acquired wait_ms=%d",
+                (self.last_discovery - started) * 1000,
             )
         except BaseException as exc:
             # CancelledError is a BaseException. Release only our own acquired slot.

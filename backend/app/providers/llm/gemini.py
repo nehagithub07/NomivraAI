@@ -2,6 +2,8 @@ import asyncio
 import json
 import logging
 import time
+from contextvars import ContextVar
+from typing import Any
 
 import httpx
 from google import genai
@@ -14,18 +16,54 @@ from app.providers.llm.base import LLMProvider
 from app.providers.llm.context import compact_planning_context
 from app.providers.llm.prompt import SYSTEM_PROMPT
 from app.providers.llm.weather_prompt import WEATHER_SYSTEM_PROMPT
-from app.schemas.itinerary import GeneratedItinerary, TripPlanningContext
+from app.schemas.itinerary import (
+    GeneratedItinerary,
+    TripPlanningContext,
+)
 from app.schemas.weather import WeatherPlanningContext
 
 logger = logging.getLogger("nomvira.itinerary")
-GEMINI_ATTEMPT_TIMEOUT_SECONDS = 60
+
+
+# ---------------------------------------------------------
+# Gemini limits
+# ---------------------------------------------------------
+
+# One itinerary generation attempt.
+#
+# The complete itinerary service can still perform one
+# semantic repair attempt if validation fails.
+GEMINI_ATTEMPT_TIMEOUT_SECONDS = 40
+
+# Keep enough room for multi-day structured JSON.
+#
+# Gemini thinking tokens count toward max_output_tokens, so
+# making this too small can truncate otherwise valid JSON.
 GEMINI_MAX_OUTPUT_TOKENS = 6144
+
+# Companion calls are intentionally smaller/faster.
+COMPANION_ATTEMPT_TIMEOUT_SECONDS = 30
+COMPANION_MAX_OUTPUT_TOKENS = 2048
+
+MAX_MODEL_RESPONSE_BYTES = 100_000
+
 
 MESSAGE = "AI planning is temporarily unavailable. Your trip and previous itinerary are safe."
 
+COMPANION_MESSAGE = "Your travel companion is temporarily unavailable. Please try again."
 
-# Keep Gemini's generation schema intentionally simple.
-# GeneratedItinerary performs strict validation after generation.
+
+# ---------------------------------------------------------
+# Gemini itinerary JSON schema
+# ---------------------------------------------------------
+#
+# Keep the generation schema intentionally compact.
+#
+# Gemini only chooses trusted candidate IDs and scheduling
+# metadata. GeneratedItinerary performs strict Pydantic
+# validation after generation.
+# ---------------------------------------------------------
+
 GEMINI_ITINERARY_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -70,8 +108,12 @@ GEMINI_ITINERARY_SCHEMA = {
                                 },
                                 "candidate_id": {
                                     "anyOf": [
-                                        {"type": "string"},
-                                        {"type": "null"},
+                                        {
+                                            "type": "string",
+                                        },
+                                        {
+                                            "type": "null",
+                                        },
                                     ],
                                 },
                                 "period": {
@@ -127,17 +169,146 @@ GEMINI_ITINERARY_SCHEMA = {
 }
 
 
+def api_status(
+    error: errors.APIError,
+) -> int | None:
+    """
+    Normalize google-genai API error codes.
+
+    The SDK normally exposes an integer HTTP-style code,
+    but this helper avoids unexpected type failures.
+    """
+
+    value = getattr(
+        error,
+        "code",
+        None,
+    )
+
+    if isinstance(
+        value,
+        int,
+    ):
+        return value
+
+    try:
+        return int(value)
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+        return None
+
+
+def itinerary_thinking_level(
+    model: str,
+) -> str:
+    """
+    Gemini 3.6 Flash supports minimal thinking.
+
+    Gemini 3.8 Flash does not support minimal, so use low
+    for other configured Gemini models.
+    """
+
+    normalized = model.strip().casefold()
+
+    if normalized == "gemini-3.6-flash":
+        return "minimal"
+
+    return "low"
+
+
+def ensure_model_content_size(
+    content: Any,
+) -> None:
+    """
+    Prevent unexpectedly large provider responses from
+    propagating through the application.
+    """
+
+    try:
+        size = len(content.model_dump_json().encode("utf-8"))
+
+    except (
+        AttributeError,
+        TypeError,
+        ValueError,
+    ):
+        raise ValueError("Gemini returned invalid model content.") from None
+
+    if size > MAX_MODEL_RESPONSE_BYTES:
+        raise ValueError("Gemini returned oversized model content.")
+
+
 class GeminiLLMProvider(LLMProvider):
-    def __init__(self, settings: Settings):
+    def __init__(
+        self,
+        settings: Settings,
+    ):
         self.settings = settings
+        self._chat_model = ContextVar("companion_model", default=settings.gemini_model)
 
-    async def chat(self, contents: list, declarations: list[dict]):
-        from app.companion.prompts import SYSTEM_PROMPT as COMPANION_PROMPT
+    @property
+    def model_name(self) -> str:
+        return self._chat_model.get()
 
-        message = "Your travel companion is temporarily unavailable. Please try again."
+    # =====================================================
+    # AI Travel Companion
+    # =====================================================
+
+    async def chat(
+        self,
+        contents: list,
+        declarations: list[dict],
+        *,
+        preferred_model: str | None = None,
+    ):
+        from app.companion.prompts import (
+            SYSTEM_PROMPT as COMPANION_PROMPT,
+        )
+
         key = self.settings.gemini_api_key.get_secret_value()
+
         if not key:
-            raise AppError("COMPANION_CONFIGURATION_ERROR", message, 503)
+            raise AppError(
+                "COMPANION_CONFIGURATION_ERROR",
+                COMPANION_MESSAGE,
+                503,
+            )
+
+        model = preferred_model or self.settings.gemini_model
+
+        logger.info(
+            ("companion_provider_started model=%s message_count=%d tool_count=%d"),
+            model,
+            len(contents),
+            len(declarations),
+        )
+
+        started = time.monotonic()
+
+        # Only attach tool configuration when the
+        # companion actually has declared tools.
+        tools = None
+        tool_config = None
+        automatic_function_calling = None
+
+        if declarations:
+            tools = [
+                types.Tool(
+                    function_declarations=[
+                        types.FunctionDeclaration(**declaration) for declaration in declarations
+                    ]
+                )
+            ]
+
+            automatic_function_calling = types.AutomaticFunctionCallingConfig(disable=True)
+
+            tool_config = types.ToolConfig(
+                function_calling_config=types.FunctionCallingConfig(mode="ANY")
+            )
+
         try:
             async with genai.Client(
                 api_key=key,
@@ -145,53 +316,189 @@ class GeminiLLMProvider(LLMProvider):
                 vertexai=False,
                 http_options=types.HttpOptions(retry_options=types.HttpRetryOptions(attempts=1)),
             ).aio as client:
-                async with asyncio.timeout(20):
-                    response = await client.models.generate_content(
-                        model=self.settings.gemini_model,
-                        contents=contents,
-                        config=types.GenerateContentConfig(
-                            system_instruction=COMPANION_PROMPT,
-                            tools=[
-                                types.Tool(
-                                    function_declarations=[
-                                        types.FunctionDeclaration(**item) for item in declarations
-                                    ]
-                                )
-                            ],
-                            automatic_function_calling=types.AutomaticFunctionCallingConfig(
-                                disable=True
-                            ),
-                            tool_config=types.ToolConfig(
-                                function_calling_config=types.FunctionCallingConfig(mode="ANY")
-                            ),
-                            thinking_config=types.ThinkingConfig(
-                                thinking_level="low", include_thoughts=False
-                            ),
-                            max_output_tokens=2048,
+                async with asyncio.timeout(COMPANION_ATTEMPT_TIMEOUT_SECONDS):
+                    config = types.GenerateContentConfig(
+                        system_instruction=COMPANION_PROMPT,
+                        tools=tools,
+                        automatic_function_calling=automatic_function_calling,
+                        tool_config=tool_config,
+                        thinking_config=types.ThinkingConfig(
+                            thinking_level=itinerary_thinking_level(model),
+                            include_thoughts=False,
                         ),
+                        max_output_tokens=COMPANION_MAX_OUTPUT_TOKENS,
                     )
+                    # Continuations retain the model that produced their opaque
+                    # thought signatures. Failover is safe before the first reply.
+                    fallback = model if preferred_model else self.settings.gemini_itinerary_model
+                    try:
+                        async with asyncio.timeout(
+                            12 if fallback != model else COMPANION_ATTEMPT_TIMEOUT_SECONDS
+                        ):
+                            response = await client.models.generate_content(
+                                model=model,
+                                contents=contents,
+                                config=config,
+                            )
+                    except (errors.APIError, TimeoutError) as error:
+                        # An overloaded model can return 503 while another
+                        # configured Gemini model remains available. Keep the
+                        # fallback inside the same total deadline and tools.
+                        if (
+                            fallback == model
+                            or isinstance(error, errors.APIError)
+                            and api_status(error) != 503
+                        ):
+                            raise
+                        model = fallback
+                        logger.info("companion_provider_fallback model=%s", model)
+                        config = config.model_copy(
+                            update={
+                                "thinking_config": types.ThinkingConfig(
+                                    thinking_level=itinerary_thinking_level(model),
+                                    include_thoughts=False,
+                                )
+                            }
+                        )
+                        response = await client.models.generate_content(
+                            model=model,
+                            contents=contents,
+                            config=config,
+                        )
+                    self._chat_model.set(model)
+
             if not response.candidates or not response.candidates[0].content:
-                raise ValueError("Missing model content")
+                logger.warning("companion_provider_invalid_response reason=missing_content")
+
+                raise ValueError("Gemini returned no companion content.")
+
             content = response.candidates[0].content
-            if len(content.model_dump_json()) > 100_000:
-                raise ValueError("Oversized model content")
-            return content
-        except errors.APIError as error:
-            limited = error.code == 429
-            code = (
-                "RATE_LIMITED"
-                if limited
-                else "TIMEOUT"
-                if error.code in (408, 504)
-                else "UNAVAILABLE"
+
+            ensure_model_content_size(content)
+
+            logger.info(
+                ("companion_provider_completed elapsed_ms=%d"),
+                int((time.monotonic() - started) * 1000),
             )
-            raise AppError(f"COMPANION_PROVIDER_{code}", message, 429 if limited else 503) from None
+
+            return content
+
+        except errors.APIError as error:
+            status = api_status(error)
+
+            logger.warning(
+                ("companion_provider_failed status=%s"),
+                status,
+            )
+
+            if status == 429:
+                raise AppError(
+                    "COMPANION_PROVIDER_RATE_LIMITED",
+                    COMPANION_MESSAGE,
+                    429,
+                ) from None
+
+            if status in (
+                401,
+                403,
+            ):
+                raise AppError(
+                    "COMPANION_CONFIGURATION_ERROR",
+                    COMPANION_MESSAGE,
+                    503,
+                ) from None
+
+            if status in (
+                400,
+                404,
+            ):
+                raise AppError(
+                    "COMPANION_CONFIGURATION_ERROR",
+                    COMPANION_MESSAGE,
+                    503,
+                ) from None
+
+            if status in (
+                408,
+                504,
+            ):
+                raise AppError(
+                    "COMPANION_PROVIDER_TIMEOUT",
+                    COMPANION_MESSAGE,
+                    503,
+                ) from None
+
+            if status is not None and 500 <= status <= 599:
+                raise AppError(
+                    "COMPANION_PROVIDER_UNAVAILABLE",
+                    COMPANION_MESSAGE,
+                    503,
+                ) from None
+
+            raise AppError(
+                "COMPANION_PROVIDER_UNAVAILABLE",
+                COMPANION_MESSAGE,
+                503,
+            ) from None
+
         except (TimeoutError, httpx.TimeoutException):
-            raise AppError("COMPANION_PROVIDER_TIMEOUT", message, 503) from None
-        except (ValueError, TypeError, ValidationError):
-            raise AppError("COMPANION_PROVIDER_INVALID_RESPONSE", message, 502) from None
-        except Exception:
-            raise AppError("COMPANION_PROVIDER_UNAVAILABLE", message, 503) from None
+            logger.warning(
+                ("companion_provider_timeout elapsed_ms=%d"),
+                int((time.monotonic() - started) * 1000),
+            )
+
+            raise AppError(
+                "COMPANION_PROVIDER_TIMEOUT",
+                COMPANION_MESSAGE,
+                503,
+            ) from None
+
+        except (
+            ValidationError,
+            ValueError,
+            TypeError,
+        ) as error:
+            logger.warning(
+                ("companion_provider_invalid_response error_type=%s"),
+                type(error).__name__,
+            )
+
+            raise AppError(
+                "COMPANION_PROVIDER_INVALID_RESPONSE",
+                COMPANION_MESSAGE,
+                502,
+            ) from None
+
+        except httpx.RequestError as error:
+            logger.warning(
+                ("companion_provider_connection_error error_type=%s"),
+                type(error).__name__,
+            )
+
+            raise AppError(
+                "COMPANION_PROVIDER_UNAVAILABLE",
+                COMPANION_MESSAGE,
+                503,
+            ) from None
+
+        except AppError:
+            raise
+
+        except Exception as error:
+            logger.exception(
+                ("companion_provider_failed reason=unexpected error_type=%s"),
+                type(error).__name__,
+            )
+
+            raise AppError(
+                "COMPANION_PROVIDER_UNAVAILABLE",
+                COMPANION_MESSAGE,
+                503,
+            ) from None
+
+    # =====================================================
+    # AI Itinerary Generator
+    # =====================================================
 
     async def generate_itinerary(
         self,
@@ -200,6 +507,7 @@ class GeminiLLMProvider(LLMProvider):
         previous: GeneratedItinerary | None = None,
         validation_errors: list[str] | None = None,
     ) -> GeneratedItinerary:
+
         key = self.settings.gemini_api_key.get_secret_value()
 
         if not key:
@@ -209,7 +517,23 @@ class GeminiLLMProvider(LLMProvider):
                 503,
             )
 
-        content = {"planning_context": compact_planning_context(context)}
+        content: dict[
+            str,
+            Any,
+        ] = {"planning_context": compact_planning_context(context)}
+
+        # -------------------------------------------------
+        # Semantic repair
+        # -------------------------------------------------
+        #
+        # We do not ask Gemini to regenerate blindly.
+        #
+        # It receives:
+        # - previous structured output
+        # - concrete semantic validation errors
+        #
+        # The service limits how many repairs can occur.
+        # -------------------------------------------------
 
         if previous is not None:
             content["repair"] = {
@@ -218,40 +542,62 @@ class GeminiLLMProvider(LLMProvider):
             }
 
         model = self.settings.gemini_itinerary_model
+
         system_prompt = (
-            WEATHER_SYSTEM_PROMPT if isinstance(context, WeatherPlanningContext) else SYSTEM_PROMPT
+            WEATHER_SYSTEM_PROMPT
+            if isinstance(
+                context,
+                WeatherPlanningContext,
+            )
+            else SYSTEM_PROMPT
         )
-        prompt = json.dumps(content, ensure_ascii=False, separators=(",", ":"))
+
+        prompt = json.dumps(
+            content,
+            ensure_ascii=False,
+            separators=(
+                ",",
+                ":",
+            ),
+        )
+
+        prompt_bytes = len(system_prompt.encode("utf-8")) + len(prompt.encode("utf-8"))
+
         logger.info(
-            "itinerary_provider_started model=%s trip_days=%d attraction_count=%d "
-            "food_count=%d proximity_pair_count=%d prompt_bytes=%d",
+            (
+                "itinerary_provider_started "
+                "model=%s "
+                "trip_days=%d "
+                "attraction_count=%d "
+                "food_count=%d "
+                "proximity_pair_count=%d "
+                "repair=%s "
+                "prompt_bytes=%d"
+            ),
             model,
             len(context.dates),
             len(context.attractions),
             len(context.food),
             len(context.proximity),
-            len(system_prompt.encode("utf-8")) + len(prompt.encode("utf-8")),
+            previous is not None,
+            prompt_bytes,
         )
+
         started = time.monotonic()
 
         try:
-            # Do NOT set HttpOptions.timeout here.
+            # ---------------------------------------------
+            # Do not add a second long SDK timeout here.
             #
-            # Setting timeout=90_000 caused the Gemini request itself to
-            # receive a ~90 second server deadline and return
-            # DEADLINE_EXCEEDED.
-            #
-            # The application-level asyncio timeout below remains the
-            # authoritative timeout for one Gemini generation attempt.
+            # asyncio.timeout() is the application-level
+            # deadline for one model attempt.
+            # ---------------------------------------------
+
             async with genai.Client(
                 api_key=key,
                 enterprise=False,
                 vertexai=False,
-                http_options=types.HttpOptions(
-                    retry_options=types.HttpRetryOptions(
-                        attempts=1,
-                    ),
-                ),
+                http_options=types.HttpOptions(retry_options=types.HttpRetryOptions(attempts=1)),
             ).aio as client:
                 async with asyncio.timeout(GEMINI_ATTEMPT_TIMEOUT_SECONDS):
                     response = await client.models.generate_content(
@@ -262,57 +608,97 @@ class GeminiLLMProvider(LLMProvider):
                             response_mime_type="application/json",
                             response_json_schema=GEMINI_ITINERARY_SCHEMA,
                             thinking_config=types.ThinkingConfig(
-                                thinking_level="minimal" if model == "gemini-3.6-flash" else "low",
+                                thinking_level=itinerary_thinking_level(model),
+                                include_thoughts=False,
                             ),
-                            max_output_tokens=GEMINI_MAX_OUTPUT_TOKENS,
+                            max_output_tokens=max(
+                                GEMINI_MAX_OUTPUT_TOKENS, min(16384, len(context.dates) * 1024)
+                            ),
                         ),
                     )
 
             text = response.text
 
-            if not isinstance(text, str):
+            if (
+                not isinstance(
+                    text,
+                    str,
+                )
+                or not text.strip()
+            ):
                 logger.warning("itinerary_provider_invalid_response reason=response_text_missing")
+
                 raise ValueError("Gemini response did not contain text.")
 
             response_bytes = len(text.encode("utf-8"))
+
             logger.info(
-                "itinerary_provider_completed elapsed_ms=%d response_bytes=%d",
-                (time.monotonic() - started) * 1000,
+                ("itinerary_provider_completed elapsed_ms=%d response_bytes=%d"),
+                int((time.monotonic() - started) * 1000),
                 response_bytes,
             )
-            if response_bytes > 100_000:
+
+            if response_bytes > MAX_MODEL_RESPONSE_BYTES:
                 logger.warning("itinerary_provider_invalid_response reason=response_too_large")
+
                 raise ValueError("Gemini response exceeded maximum size.")
 
-            # Strict application-side Pydantic validation.
+            # ---------------------------------------------
+            # Strict application-side validation
+            # ---------------------------------------------
+
             return GeneratedItinerary.model_validate_json(text)
 
         except errors.APIError as error:
-            status = error.code
+            status = api_status(error)
 
             logger.warning(
-                "itinerary_provider_failed status=%s",
+                ("itinerary_provider_failed status=%s elapsed_ms=%d"),
                 status,
+                int((time.monotonic() - started) * 1000),
             )
 
             if status == 429:
                 code = "ITINERARY_PROVIDER_RATE_LIMITED"
+
                 http_status = 429
 
-            elif status in (401, 403):
+            elif status in (
+                401,
+                403,
+            ):
                 code = "ITINERARY_PROVIDER_AUTH_ERROR"
+
                 http_status = 503
 
-            elif status in (400, 404):
+            elif status in (
+                400,
+                404,
+            ):
+                # Common examples:
+                # - invalid model name
+                # - unsupported configuration
+                # - invalid structured-output schema
                 code = "ITINERARY_CONFIGURATION_ERROR"
+
                 http_status = 503
 
-            elif status in (408, 504):
+            elif status in (
+                408,
+                504,
+            ):
                 code = "ITINERARY_PROVIDER_TIMEOUT"
+
+                http_status = 503
+
+            elif status is not None and 500 <= status <= 599:
+                code = "ITINERARY_PROVIDER_UNAVAILABLE"
+
                 http_status = 503
 
             else:
                 code = "ITINERARY_PROVIDER_UNAVAILABLE"
+
                 http_status = 503
 
             raise AppError(
@@ -322,7 +708,10 @@ class GeminiLLMProvider(LLMProvider):
             ) from None
 
         except (TimeoutError, httpx.TimeoutException):
-            logger.warning("itinerary_provider_timeout")
+            logger.warning(
+                ("itinerary_provider_timeout elapsed_ms=%d"),
+                int((time.monotonic() - started) * 1000),
+            )
 
             raise AppError(
                 "ITINERARY_PROVIDER_TIMEOUT",
@@ -330,9 +719,13 @@ class GeminiLLMProvider(LLMProvider):
                 503,
             ) from None
 
-        except (ValidationError, ValueError, TypeError) as error:
+        except (
+            ValidationError,
+            ValueError,
+            TypeError,
+        ) as error:
             logger.warning(
-                "itinerary_provider_invalid_response error_type=%s",
+                ("itinerary_provider_invalid_response error_type=%s"),
                 type(error).__name__,
             )
 
@@ -342,8 +735,11 @@ class GeminiLLMProvider(LLMProvider):
                 502,
             ) from None
 
-        except httpx.RequestError:
-            logger.warning("itinerary_provider_unavailable")
+        except httpx.RequestError as error:
+            logger.warning(
+                ("itinerary_provider_unavailable error_type=%s"),
+                type(error).__name__,
+            )
 
             raise AppError(
                 "ITINERARY_PROVIDER_UNAVAILABLE",
@@ -351,9 +747,12 @@ class GeminiLLMProvider(LLMProvider):
                 503,
             ) from None
 
+        except AppError:
+            raise
+
         except Exception as error:
-            logger.warning(
-                "itinerary_provider_failed reason=unexpected error_type=%s",
+            logger.exception(
+                ("itinerary_provider_failed reason=unexpected error_type=%s"),
                 type(error).__name__,
             )
 

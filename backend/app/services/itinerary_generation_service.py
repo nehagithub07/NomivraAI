@@ -9,13 +9,16 @@ from app.providers.llm.base import LLMProvider
 from app.providers.llm.fixture import FixtureLLMProvider
 from app.providers.llm.gemini import MESSAGE, GeminiLLMProvider
 from app.providers.llm.prompt import ITINERARY_PROMPT_VERSION
-from app.schemas.itinerary import ItineraryGenerationRequest, ItineraryGenerationResponse
+from app.schemas.itinerary import (
+    ItineraryGenerationRequest,
+    ItineraryGenerationResponse,
+)
 from app.services.itinerary_context_service import build_planning_context
 from app.services.itinerary_validation_service import resolve_itinerary, semantic_errors
 
 logger = logging.getLogger("nomvira.itinerary")
 # Leave room for the weather endpoint's optional 12-second forecast inside its 90s BFF budget.
-GENERATION_TIMEOUT_SECONDS = 75
+GENERATION_TIMEOUT_SECONDS = 88
 
 
 class ItineraryGenerationService:
@@ -45,21 +48,27 @@ class ItineraryGenerationService:
         now, user = time.monotonic(), str(request.user_id)
         if self.concurrent.locked() or now - self.events.get(user, float("-inf")) < 30:
             raise AppError(
-                "ITINERARY_RATE_LIMITED", "Please wait before generating another itinerary.", 429
+                "ITINERARY_RATE_LIMITED",
+                "Please wait before generating another itinerary.",
+                429,
             )
         async with self.concurrent:
             self.events[user] = now
             self.events.move_to_end(user)
             while len(self.events) > 256:
                 self.events.popitem(last=False)
-            logger.info("itinerary_generation_started provider=%s", self.settings.llm_provider)
+            logger.info(
+                "itinerary_generation_started provider=%s", self.settings.llm_provider
+            )
             try:
                 async with asyncio.timeout(GENERATION_TIMEOUT_SECONDS):
                     plan = await self.provider.generate_itinerary(context)
                     failures = validate(plan, context)
                     repaired = bool(failures)
                     if failures:
-                        logger.info("itinerary_repair_requested error_count=%d", len(failures))
+                        logger.info(
+                            "itinerary_repair_requested error_count=%d", len(failures)
+                        )
                         plan = await self.provider.generate_itinerary(
                             context, previous=plan, validation_errors=failures
                         )
@@ -80,13 +89,17 @@ class ItineraryGenerationService:
                     "no Gemini request was made."
                 )
             logger.info(
-                "itinerary_generation_completed days=%d repaired=%s", len(document.days), repaired
+                "itinerary_generation_completed days=%d repaired=%s",
+                len(document.days),
+                repaired,
             )
             return ItineraryGenerationResponse(
                 provider=self.settings.llm_provider,
-                model_name="deterministic-fixture-v1"
-                if demo
-                else self.settings.gemini_itinerary_model,
+                model_name=(
+                    "deterministic-fixture-v1"
+                    if demo
+                    else self.settings.gemini_itinerary_model
+                ),
                 prompt_version=prompt_version,
                 demo=demo,
                 itinerary=document,

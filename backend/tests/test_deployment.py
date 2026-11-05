@@ -13,6 +13,7 @@ CONFIGURED = {
     "stayapi_api_key": "test-stayapi-key-never-real",
     "geoapify_api_key": "test-geoapify-key-never-real",
     "gemini_api_key": "test-gemini-key-never-real",
+    "openrouteservice_api_key": "test-routing-key-never-real",
 }
 
 
@@ -26,7 +27,6 @@ def test_complete_production_environment():
         ({"app_env": "development"}, "APP_ENV"),
         ({"frontend_origin": "http://localhost:3000"}, "FRONTEND_ORIGIN"),
         ({"frontend_origin": "https://user:PRIVATE@example.net"}, "FRONTEND_ORIGIN"),
-        ({"overpass_api_url": "http://overpass-api.de/api/interpreter"}, "OVERPASS_API_URL"),
         ({"nomvira_internal_api_key": "PRIVATE"}, "NOMVIRA_INTERNAL_API_KEY"),
         ({"stayapi_api_key": ""}, "STAYAPI_API_KEY"),
         ({"geoapify_api_key": ""}, "GEOAPIFY_API_KEY"),
@@ -41,6 +41,11 @@ def test_invalid_production_environment_fails_without_echoing_values(changes, na
     errors = deployment_errors(Settings(**{**CONFIGURED, **changes}))
     assert any(name in error for error in errors)
     assert "PRIVATE" not in " ".join(errors)
+
+
+def test_insecure_overpass_configuration_is_rejected():
+    with pytest.raises(ValidationError):
+        Settings(**{**CONFIGURED, "overpass_api_url": "http://overpass-api.de/api/interpreter"})
 
 
 def test_startup_check_masks_pydantic_input_values(monkeypatch, capsys):

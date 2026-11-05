@@ -16,7 +16,8 @@ def edit_itinerary(request: CompanionEditRequest):
         (day, item)
         for day in plan.days
         for item in day.items
-        if item.candidate_type == "attraction" and item.candidate_id == args.get("candidate_id")
+        if item.candidate_type == "attraction"
+        and item.candidate_id == args.get("candidate_id")
     ]
     if len(matches) != 1 or semantic_errors(original, context):
         raise AppError(
@@ -27,9 +28,15 @@ def edit_itinerary(request: CompanionEditRequest):
     source, item = matches[0]
     if request.tool_name == "move_itinerary_activity":
         targets = [day for day in plan.days if str(day.date) == args.get("target_date")]
-        if not targets or args.get("target_period") not in ("morning", "afternoon", "evening"):
+        if not targets or args.get("target_period") not in (
+            "morning",
+            "afternoon",
+            "evening",
+        ):
             raise AppError(
-                "COMPANION_INVALID_DATE", "Choose a date and period within this trip.", 422
+                "COMPANION_INVALID_DATE",
+                "Choose a date and period within this trip.",
+                422,
             )
         source.items.remove(item)
         item.period = args["target_period"]
@@ -37,7 +44,9 @@ def edit_itinerary(request: CompanionEditRequest):
     else:
         item.candidate_id = args.get("replacement_candidate_id")
     for day in plan.days:
-        day.items.sort(key=lambda item: ("morning", "afternoon", "evening").index(item.period))
+        day.items.sort(
+            key=lambda item: ("morning", "afternoon", "evening").index(item.period)
+        )
     if semantic_errors(plan, context) or any(not day.items for day in plan.days):
         raise AppError(
             "COMPANION_INVALID_ARGUMENTS",

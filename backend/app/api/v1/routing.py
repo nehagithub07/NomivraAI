@@ -8,7 +8,6 @@ from app.schemas.routing import (
     RouteResult,
 )
 
-
 router = APIRouter(
     prefix="/routing",
     dependencies=[Depends(require_internal_key)],

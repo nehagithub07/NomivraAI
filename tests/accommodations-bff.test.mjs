@@ -71,24 +71,31 @@ test("hotel BFF independently authenticates; rejects foreign origins and browser
   for (const body of [{ owner_id: "other" }, { destination: "Paris" }, { start_date: "2000-01-01" }, { rooms: 1 }, { budget: 1 }]) assert.equal((await POST(hotelRequest(body),context())).status,422);
   assert.equal(calls,0);
 });
-test("hotel reads never call providers; search derives trip context and caches signed results", async t => {
-  configure(t); const { db,state } = database(); let calls=0;
+test("hotel reads restore backend-cached results without searching providers", async t => {
+  configure(t); const { db,state } = database(); let calls=0, backendCache=false;
   t.mock.method(globalThis,"fetch",async (url,options) => {
     calls++; assert.equal(url,"http://backend.test:8000/api/v1/accommodations/search");
     const body=JSON.parse(options.body); assert.equal(body.user_id,userId); assert.equal(body.check_in,hotelTrip.start_date); assert.equal(body.check_out,hotelTrip.end_date);
     assert.equal(body.travelers,2); assert.equal(body.rooms,1); assert.equal(body.trip_budget,"2500"); assert.equal(body.destination_key,"open_meteo:1850147");
     assert.equal(options.headers["X-Nomvira-Internal-Key"],KEY); assert.equal("cookie" in options.headers,false); assert.equal("X-API-Key" in options.headers,false);
-    return Response.json(hotelResults());
+    if(body.cache_only && !backendCache) return Response.json({error:{code:"ACCOMMODATION_CACHE_MISS"}},{status:404});
+    if(!body.cache_only) backendCache=true;
+    return Response.json(body.cache_only ? { ...hotelResults(), cached:true } : hotelResults());
   });
   const { GET,POST }=load("src/app/api/trips/[tripId]/hotels/route.ts",{db});
-  assert.deepEqual(await (await GET(hotelRequest({},"GET"),context())).json(),{results:null}); assert.equal(calls,0);
+  assert.deepEqual(await (await GET(hotelRequest({},"GET"),context())).json(),{results:null}); assert.equal(calls,1);
   const response=await POST(hotelRequest(),context()); assert.equal(response.status,200); assert.equal(response.headers.get("cache-control"),"no-store");
   const results=(await response.json()).results,proof=results.candidates[0].selection_proof;
   assert.ok(verifyProof(proof.payload,proof.signature,KEY)); assert.equal(JSON.parse(proof.payload).trip_id,tripId); assert.deepEqual(JSON.parse(proof.payload).context,accommodationContext(hotelTrip));
   assert.ok(state.filters.some(([,key,value])=>key==="owner_id"&&value===userId));
   assert.equal((await (await GET(hotelRequest({},"GET"),context())).json()).results.cached,true);
-  assert.equal((await (await POST(hotelRequest(),context())).json()).results.cached,true); assert.equal(calls,1);
-  await POST(hotelRequest({refresh:true}),context()); assert.equal(calls,2);
+  assert.equal((await (await POST(hotelRequest(),context())).json()).results.cached,true); assert.equal(calls,2);
+  await POST(hotelRequest({refresh:true}),context()); assert.equal(calls,3);
+
+  const secondInstance = load("src/app/api/trips/[tripId]/hotels/route.ts",{db});
+  const restored = await (await secondInstance.GET(hotelRequest({},"GET"),context())).json();
+  assert.equal(restored.results.cached,true);
+  assert.equal(calls,4);
 });
 test("unowned and same-day trips never trigger hotel searches",async t=>{
   configure(t);t.mock.method(globalThis,"fetch",async()=>{throw new Error("No provider call allowed");});

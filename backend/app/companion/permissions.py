@@ -24,5 +24,9 @@ def may_propose_write(message: str) -> bool:
 
 def unsupported_transaction(message: str) -> bool:
     return bool(
-        re.search(r"\b(book|reserve|purchase|buy|pay)\b|cancel (?:my |the )?booking", message, re.I)
+        re.search(
+            r"\b(book|reserve|purchase|buy|pay)\b|cancel (?:my |the )?booking",
+            message,
+            re.I,
+        )
     )

@@ -1,7 +1,10 @@
 from fastapi import APIRouter, Depends, Request
 
 from app.api.dependencies import require_internal_key
-from app.schemas.itinerary import ItineraryGenerationRequest, ItineraryGenerationResponse
+from app.schemas.itinerary import (
+    ItineraryGenerationRequest,
+    ItineraryGenerationResponse,
+)
 from app.schemas.weather import WeatherAdaptationRequest, WeatherAdaptationResponse
 
 router = APIRouter(prefix="/itineraries", dependencies=[Depends(require_internal_key)])

@@ -28,6 +28,57 @@ function distance(meters: number) {
 }
 
 
+function routingErrorMessage(
+  code: string,
+  fallback: string,
+) {
+  switch (code) {
+    case "ROUTING_NOT_ENOUGH_POINTS":
+      return "This day needs at least two mapped places before travel times can be calculated.";
+
+    case "ROUTING_ITINERARY_REQUIRED":
+      return "Generate an itinerary before calculating travel times.";
+
+    case "ROUTING_DAY_NOT_FOUND":
+      return "This itinerary day could not be found.";
+
+    case "ROUTE_NOT_FOUND":
+      return "No walking or driving route could be found between these places.";
+
+    case "ROUTING_PROVIDER_RATE_LIMITED":
+      return "The routing service is busy right now. Please try again shortly.";
+
+    case "ROUTING_PROVIDER_CONNECT_TIMEOUT":
+    case "ROUTING_PROVIDER_READ_TIMEOUT":
+    case "ROUTING_PROVIDER_WRITE_TIMEOUT":
+    case "ROUTING_PROVIDER_POOL_TIMEOUT":
+    case "ROUTING_PROVIDER_TIMEOUT":
+      return "The routing service took too long to respond. Please try again.";
+
+    case "ROUTING_PROVIDER_AUTH_ERROR":
+      return "Travel-time routing is temporarily unavailable because the routing provider could not be authenticated.";
+
+    case "ROUTING_CONFIGURATION_ERROR":
+      return "Travel-time routing is not configured correctly.";
+
+    case "ROUTING_REQUEST_TOO_LARGE":
+      return "There are too many mapped stops in this route. Try calculating a shorter route.";
+
+    case "ROUTING_PROVIDER_INVALID_REQUEST":
+      return "The routing service could not process these locations.";
+
+    case "ROUTING_PROVIDER_INVALID_RESPONSE":
+      return "The routing provider returned an invalid response. Please try again.";
+
+    case "ROUTING_PROVIDER_UNAVAILABLE":
+      return "The routing service is temporarily unavailable. Please try again.";
+
+    default:
+      return fallback;
+  }
+}
+
+
 export function DayRouteSummary({
   tripId,
   dayNumber,
@@ -39,7 +90,9 @@ export function DayRouteSummary({
     useState<RoutingMode>("driving");
 
   const [route, setRoute] =
-    useState<RouteResponse | null>(null);
+    useState<RouteResponse | null>(
+      null,
+    );
 
   const [loading, setLoading] =
     useState(false);
@@ -64,42 +117,59 @@ export function DayRouteSummary({
     try {
       const params =
         new URLSearchParams({
-          day_number: String(dayNumber),
+          day_number:
+            String(dayNumber),
+
           mode,
         });
 
-      const response = await fetch(
-        `/api/trips/${tripId}/routing?${params.toString()}`,
-        {
-          method: "GET",
-          cache: "no-store",
-        },
-      );
+      const response =
+        await fetch(
+          `/api/trips/${encodeURIComponent(
+            tripId,
+          )}/routing?${params.toString()}`,
+          {
+            method: "GET",
+            cache: "no-store",
+          },
+        );
 
-      const data = await response
-        .json()
-        .catch(() => null);
+      const data =
+        await response
+          .json()
+          .catch(() => null);
 
+      /*
+       * The API can legitimately return errors such as
+       * ROUTING_NOT_ENOUGH_POINTS.
+       *
+       * These are handled UI states, so use console.warn()
+       * rather than console.error(). Next.js development
+       * mode can otherwise display handled errors in the
+       * red console-error overlay.
+       */
       if (!response.ok) {
         const code =
-          typeof data?.error?.code === "string"
+          typeof data?.error
+            ?.code === "string"
             ? data.error.code
             : "ROUTING_FAILED";
 
-        const message =
-          typeof data?.error?.message === "string"
+        const fallbackMessage =
+          typeof data?.error
+            ?.message ===
+          "string"
             ? data.error.message
             : "Travel times are temporarily unavailable.";
 
-        console.error(
-          "[routing] request_failed",
-          {
-            status: response.status,
+        const message =
+          routingErrorMessage(
             code,
-            message,
-            dayNumber,
-            mode,
-          },
+            fallbackMessage,
+          );
+
+        console.warn(
+          `[routing] request_failed status=${response.status} code=${code} day=${dayNumber} mode=${mode}`,
         );
 
         setErrorCode(code);
@@ -114,7 +184,12 @@ export function DayRouteSummary({
         );
 
       if (!parsed.success) {
-        console.error(
+        /*
+         * Invalid payloads are also handled gracefully.
+         * Avoid console.error() so they do not create a
+         * Next.js development error overlay.
+         */
+        console.warn(
           "[routing] invalid_response",
           parsed.error.flatten(),
         );
@@ -131,9 +206,13 @@ export function DayRouteSummary({
       }
 
       setRoute(parsed.data);
-
     } catch (cause) {
-      console.error(
+      /*
+       * Network errors, aborted requests, or unexpected
+       * fetch failures are presented in the component
+       * instead of triggering the development overlay.
+       */
+      console.warn(
         "[routing] request_exception",
         cause,
       );
@@ -143,9 +222,8 @@ export function DayRouteSummary({
       );
 
       setError(
-        "Travel times are temporarily unavailable.",
+        "Travel times are temporarily unavailable. Please try again.",
       );
-
     } finally {
       setLoading(false);
     }
@@ -155,8 +233,20 @@ export function DayRouteSummary({
   function changeMode(
     nextMode: RoutingMode,
   ) {
+    if (
+      loading ||
+      nextMode === mode
+    ) {
+      return;
+    }
+
     setMode(nextMode);
 
+    /*
+     * Route results are mode-specific.
+     * Clear the previous result when switching
+     * between walking and driving.
+     */
     setRoute(null);
     setError("");
     setErrorCode("");
@@ -175,7 +265,9 @@ export function DayRouteSummary({
           }
           disabled={loading}
           onClick={() =>
-            changeMode("walking")
+            changeMode(
+              "walking",
+            )
           }
         >
           Walk
@@ -190,7 +282,9 @@ export function DayRouteSummary({
           }
           disabled={loading}
           onClick={() =>
-            changeMode("driving")
+            changeMode(
+              "driving",
+            )
           }
         >
           Drive
@@ -243,7 +337,8 @@ export function DayRouteSummary({
                 route.total_distance_meters,
               )}
               {" · "}
-              {route.mode === "walking"
+              {route.mode ===
+              "walking"
                 ? "Walking"
                 : "Driving"}
 
@@ -254,17 +349,24 @@ export function DayRouteSummary({
           </div>
 
           {route.segments.map(
-            (segment, index) => (
+            (
+              segment,
+              index,
+            ) => (
               <div
                 key={`${segment.from_index}-${segment.to_index}-${index}`}
                 className="rounded-xl border p-3"
               >
                 <p className="type-meta font-medium">
                   {segment.from_label ??
-                    `Stop ${index + 1}`}
+                    `Stop ${
+                      index + 1
+                    }`}
                   {" → "}
                   {segment.to_label ??
-                    `Stop ${index + 2}`}
+                    `Stop ${
+                      index + 2
+                    }`}
                 </p>
 
                 <p className="type-meta mt-1 text-muted-foreground">
@@ -281,7 +383,9 @@ export function DayRouteSummary({
                 {segment.warning ===
                   "long_transfer" && (
                     <p className="type-meta mt-2 text-amber-700">
-                      Long transfer between these activities.
+                      Long transfer
+                      between these
+                      activities.
                     </p>
                   )}
               </div>

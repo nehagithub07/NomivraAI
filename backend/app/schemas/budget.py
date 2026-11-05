@@ -9,12 +9,16 @@ Category = Literal["accommodation", "food", "activities", "transport", "miscella
 Currency = Literal["USD", "EUR", "GBP", "INR", "CAD", "AUD", "JPY"]
 Style = Literal["budget", "balanced", "premium"]
 Money = Annotated[Decimal, Field(ge=0, le=100000000, max_digits=12, decimal_places=2)]
-Description = Annotated[str, Field(min_length=1, max_length=160, pattern=r"^[^\x00-\x1f\x7f]+$")]
+Description = Annotated[
+    str, Field(min_length=1, max_length=160, pattern=r"^[^\x00-\x1f\x7f]+$")
+]
 ExpenseDate = Annotated[date, Field(ge=date(1900, 1, 1), le=date(9999, 12, 31))]
 
 
 class BudgetModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", allow_inf_nan=False, str_strip_whitespace=True)
+    model_config = ConfigDict(
+        extra="forbid", allow_inf_nan=False, str_strip_whitespace=True
+    )
 
 
 class CreateBudgetEntry(BudgetModel):
@@ -38,7 +42,8 @@ class UpdateBudgetEntry(BudgetModel):
     @model_validator(mode="after")
     def valid_patch(self):
         if not self.model_fields_set or any(
-            getattr(self, key) is None for key in self.model_fields_set - {"expense_date"}
+            getattr(self, key) is None
+            for key in self.model_fields_set - {"expense_date"}
         ):
             raise ValueError("Supply valid expense fields")
         return self
@@ -116,7 +121,8 @@ class KnownHotelCost(BudgetModel):
     quote_expires_at: datetime | None
     included: bool
     exclusion_reason: (
-        Literal["unavailable", "expired", "currency_mismatch", "manual_replacement"] | None
+        Literal["unavailable", "expired", "currency_mismatch", "manual_replacement"]
+        | None
     )
 
 

@@ -33,7 +33,7 @@ services:
       - key: STAYAPI_API_KEY
         sync: false
       - key: FOOD_PROVIDER
-        value: geoapify
+        value: google_maps
       - key: GEOAPIFY_API_KEY
         sync: false
       - key: LLM_PROVIDER
@@ -41,4 +41,8 @@ services:
       - key: GEMINI_MODEL
         value: gemini-3.8-flash
       - key: GEMINI_API_KEY
+        sync: false
+      - key: ROUTING_PROVIDER
+        value: openrouteservice
+      - key: OPENROUTESERVICE_API_KEY
         sync: false

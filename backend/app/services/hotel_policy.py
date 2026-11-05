@@ -7,7 +7,7 @@ BUDGET_ALLOCATION = {
     "premium": Decimal(".48"),
 }
 BUDGET_TOLERANCE = Decimal("1.20")
-MIN_GUEST_QUALITY = 0.70
+MIN_GUEST_QUALITY = 0.75
 WEIGHTS = {
     "budget_fit": 0.30,
     "guest_quality": 0.25,

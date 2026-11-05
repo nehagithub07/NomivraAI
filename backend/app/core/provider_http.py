@@ -6,7 +6,6 @@ import httpx
 
 from app.core.errors import AppError
 
-
 logger = logging.getLogger("nomvira.providers")
 
 
@@ -35,9 +34,7 @@ async def request_json(
 
     except httpx.ConnectTimeout:
         if provider == "PLACES":
-            logger.warning(
-                "places_provider_timeout phase=connect"
-            )
+            logger.warning("places_provider_timeout phase=connect")
 
             raise AppError(
                 "PLACES_PROVIDER_CONNECT_TIMEOUT",
@@ -53,9 +50,7 @@ async def request_json(
 
     except httpx.ReadTimeout:
         if provider == "PLACES":
-            logger.warning(
-                "places_provider_timeout phase=read"
-            )
+            logger.warning("places_provider_timeout phase=read")
 
             raise AppError(
                 "PLACES_PROVIDER_READ_TIMEOUT",
@@ -71,9 +66,7 @@ async def request_json(
 
     except httpx.WriteTimeout:
         if provider == "PLACES":
-            logger.warning(
-                "places_provider_timeout phase=write"
-            )
+            logger.warning("places_provider_timeout phase=write")
 
             raise AppError(
                 "PLACES_PROVIDER_WRITE_TIMEOUT",
@@ -89,9 +82,7 @@ async def request_json(
 
     except httpx.PoolTimeout:
         if provider == "PLACES":
-            logger.warning(
-                "places_provider_timeout phase=pool"
-            )
+            logger.warning("places_provider_timeout phase=pool")
 
             raise AppError(
                 "PLACES_PROVIDER_POOL_TIMEOUT",
@@ -107,9 +98,7 @@ async def request_json(
 
     except TimeoutError:
         if provider == "PLACES":
-            logger.warning(
-                "places_provider_timeout phase=total"
-            )
+            logger.warning("places_provider_timeout phase=total")
 
             raise AppError(
                 "PLACES_PROVIDER_TIMEOUT",
@@ -146,12 +135,9 @@ async def request_json(
             503,
         ) from None
 
-
     if response.status_code == 429:
         if provider == "PLACES":
-            logger.warning(
-                "places_provider_rate_limited status=429"
-            )
+            logger.warning("places_provider_rate_limited status=429")
 
             raise AppError(
                 "PLACES_PROVIDER_RATE_LIMITED",
@@ -165,7 +151,6 @@ async def request_json(
             429,
         )
 
-
     if response.status_code == 404:
         if provider == "GEOCODING":
             raise AppError(
@@ -175,9 +160,7 @@ async def request_json(
             )
 
         if provider == "PLACES":
-            logger.warning(
-                "places_provider_failure status=404"
-            )
+            logger.warning("places_provider_failure status=404")
 
             raise AppError(
                 "PLACES_PROVIDER_UNAVAILABLE",
@@ -185,12 +168,9 @@ async def request_json(
                 503,
             )
 
-
     if response.status_code == 400:
         if provider == "PLACES":
-            safe_body = response.text[
-                :500
-            ].replace(
+            safe_body = response.text[:500].replace(
                 "\n",
                 " ",
             )
@@ -206,12 +186,9 @@ async def request_json(
             502,
         )
 
-
     if response.status_code >= 400:
         if provider == "PLACES":
-            safe_body = response.text[
-                :500
-            ].replace(
+            safe_body = response.text[:500].replace(
                 "\n",
                 " ",
             )
@@ -228,22 +205,14 @@ async def request_json(
             503,
         )
 
-
     try:
         data = response.json()
 
-        if (
-            not isinstance(data, dict)
-            or data.get("error")
-            or data.get("remark")
-        ):
+        if not isinstance(data, dict) or data.get("error") or data.get("remark"):
             if provider == "PLACES":
                 logger.warning(
                     "places_provider_failure reason=provider_remark remark=%s",
-                    str(
-                        data.get("remark")
-                        or data.get("error")
-                    )[:500],
+                    str(data.get("remark") or data.get("error"))[:500],
                 )
 
             raise ValueError
@@ -252,9 +221,7 @@ async def request_json(
 
     except ValueError:
         if provider == "PLACES":
-            logger.warning(
-                "places_provider_failure reason=invalid_response"
-            )
+            logger.warning("places_provider_failure reason=invalid_response")
 
         raise AppError(
             f"{provider}_PROVIDER_INVALID_RESPONSE",

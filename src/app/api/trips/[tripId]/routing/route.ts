@@ -12,7 +12,7 @@ import {
 
 import {
   getTripDayRoute,
-} from "@/lib/routing/server";
+} from "@/lib/routing/server.ts";
 
 import {
   routingQuerySchema,

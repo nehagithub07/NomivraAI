@@ -43,6 +43,8 @@ class AccommodationCache[T]:
                     self.pending.pop(key, None)
 
             task = asyncio.create_task(fill())
-            task.add_done_callback(lambda done: None if done.cancelled() else done.exception())
+            task.add_done_callback(
+                lambda done: None if done.cancelled() else done.exception()
+            )
             self.pending[key] = task
         return copy.deepcopy(await asyncio.shield(task))

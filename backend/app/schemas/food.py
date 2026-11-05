@@ -15,6 +15,7 @@ FoodLabel = Literal[
     "Cuisine Match",
     "Cafe Pick",
     "Local Food Pick",
+    "Highly Rated",
 ]
 
 
@@ -24,9 +25,21 @@ class FoodSearchRequest(BaseModel):
     user_id: UUID
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
+
+    destination_name: str = Field(
+        default="",
+        max_length=300,
+    )
     radius_meters: int | None = Field(default=None, ge=100, le=15000)
     categories: list[FoodCategory] = Field(
-        default_factory=lambda: ["restaurant", "cafe", "bar", "pub", "fast_food", "food_court"],
+        default_factory=lambda: [
+            "restaurant",
+            "cafe",
+            "bar",
+            "pub",
+            "fast_food",
+            "food_court",
+        ],
         min_length=1,
         max_length=8,
     )
@@ -49,7 +62,7 @@ class FoodScores(BaseModel):
 
 class FoodCandidate(BaseModel):
     model_config = ConfigDict(allow_inf_nan=False)
-    provider: Literal["geoapify", "fixture"]
+    provider: Literal["google_maps", "geoapify", "fixture"]
     provider_place_id: str = Field(min_length=1, max_length=512)
     name: str = Field(min_length=1, max_length=300)
     category: FoodCategory
@@ -66,6 +79,14 @@ class FoodCandidate(BaseModel):
     rating: float | None = None
     rating_scale: float | None = None
     review_count: int | None = None
+
+    rating_source: Literal["google_maps"] | None = None
+
+    popularity_rank: int | None = Field(
+        default=None,
+        ge=1,
+        le=200,
+    )
     recommendation_score: float = Field(default=0, ge=0, le=1)
     scores: FoodScores = Field(default_factory=FoodScores)
     labels: list[FoodLabel] = Field(default_factory=list)
@@ -73,7 +94,7 @@ class FoodCandidate(BaseModel):
 
 
 class FoodSearchResponse(BaseModel):
-    provider: Literal["geoapify", "fixture"]
+    provider: Literal["google_maps", "geoapify", "fixture"]
     demo: bool
     cached: bool = False
     searched_at: str

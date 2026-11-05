@@ -9,6 +9,11 @@ export function discoveryErrorMessage(code: unknown): string {
     case "PLACES_PROVIDER_CONNECT_TIMEOUT":
     case "PLACES_PROVIDER_CONNECTION_ERROR":
       return "We couldn't connect to the places provider. Your trip is saved. Please try again shortly.";
+    case "PLACES_PROVIDER_TIMEOUT":
+    case "PLACES_PROVIDER_READ_TIMEOUT":
+    case "PLACES_PROVIDER_WRITE_TIMEOUT":
+    case "PLACES_PROVIDER_POOL_TIMEOUT":
+      return "The places provider is taking too long to respond. Your trip is saved. Please try again shortly.";
     case "provider_rate_limited":
     case "discovery_in_progress":
       return "Place discovery is busy. Please wait a little before trying again. Your trip is saved.";

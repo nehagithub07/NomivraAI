@@ -26,12 +26,14 @@ export function HotelSkeletons() {
   </div>)}</div>;
 }
 
-export function HotelsWorkspace({ tripId, currency, initialResults, initialSelection, selectionLoadFailed = false, canSearch, currentContext, allowDemo = false }: {
+export function HotelsWorkspace({ tripId, currency, initialResults, initialCacheLoadFailed = false, initialSelection, selectionLoadFailed = false, canSearch, currentContext, allowDemo = false }: {
   tripId: string; currency: string; initialResults: HotelSearchResults | null; initialSelection: StaySelection | null;
+  initialCacheLoadFailed?: boolean;
   selectionLoadFailed?: boolean; canSearch: boolean; currentContext: Record<string, unknown>; allowDemo?: boolean;
 }) {
   const router = useRouter();
   const [results, setResults] = useState(initialResults), [selection, setSelection] = useState(initialSelection);
+  const [cacheLoadFailed, setCacheLoadFailed] = useState(initialCacheLoadFailed);
   const [filters, setFilters] = useState<HotelFilters>({ ...defaultHotelFilters }), [sort, setSort] = useState<HotelSort>("recommended");
   const [loading, setLoading] = useState(false), [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string>(), [announcement, setAnnouncement] = useState("");
@@ -62,7 +64,7 @@ export function HotelsWorkspace({ tripId, currency, initialResults, initialSelec
       const response = await fetch(`/api/trips/${tripId}/hotels`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refresh, demo }), cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(45_000)]) });
       if (!response.ok) { setError(await failureMessage(response)); setOfferDemo(response.status === 429 || response.status === 503); return; }
       const parsed = z.object({ results: signedHotelResponseSchema }).parse(await response.json());
-      setResults(parsed.results); setExpired(false);
+      setResults(parsed.results); setExpired(false); setCacheLoadFailed(false);
       demoRequested.current = demo;
       setAnnouncement(`${parsed.results.candidates.length} matching accommodations loaded${parsed.results.demo ? " using demo data" : ""}.`);
     } catch { if (!controller.signal.aborted) { setError(hotelErrorMessage(undefined)); setOfferDemo(true); } }
@@ -103,6 +105,7 @@ export function HotelsWorkspace({ tripId, currency, initialResults, initialSelec
         <Button variant="ghost" loading={saving === "clear"} disabled={!!saving || loading} onClick={() => void clearSelection()}>Remove selection</Button></div>
     </div>}
     {selectionLoadFailed && <p className="type-small mb-5 text-muted-foreground">Your saved stay couldn&apos;t be loaded. Saving a choice may need a setup update.</p>}
+    {cacheLoadFailed && <p role="status" className="type-small mb-5 text-muted-foreground">Previously cached hotel results couldn&apos;t be restored. Search again to load current recommendations.</p>}
     {results?.demo && <div role="note" className="mb-5 rounded-xl border bg-accent p-4"><p className="type-small font-semibold text-accent-foreground">Demo accommodation data</p><p className="type-small mt-1 text-muted-foreground">Fictional properties, prices and reviews for development. These are not live offers or confirmed availability.</p></div>}
     <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
       <div className="min-w-0">{results ? <><p className="type-small font-medium">{visible.length} matching {visible.length === 1 ? "stay" : "stays"}</p><p className="type-meta mt-1 text-muted-foreground">Suggested stay budget: {hotelMoney(results.stay_budget, results.currency)} · {results.rooms} {results.rooms === 1 ? "room" : "rooms"}</p></> : <p className="type-small text-muted-foreground">Compare stays for your trip dates and preferences.</p>}</div>

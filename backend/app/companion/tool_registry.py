@@ -24,9 +24,9 @@ class DateInput(StrictModel):
 class FindInput(StrictModel):
     query: str = Field(default="", max_length=80)
     category: str | None = Field(default=None, max_length=40)
-    dietary_preference: Literal["vegetarian", "vegan", "halal", "kosher", "gluten_free"] | None = (
-        None
-    )
+    dietary_preference: (
+        Literal["vegetarian", "vegan", "halal", "kosher", "gluten_free"] | None
+    ) = None
     limit: int = Field(default=5, ge=1, le=10)
     cuisine: str | None = Field(default=None, max_length=80)
     near_selected_hotel: bool = False
@@ -34,8 +34,12 @@ class FindInput(StrictModel):
 
 
 class BudgetInput(StrictModel):
-    description: str = Field(min_length=1, max_length=160, pattern=r"^[^\x00-\x1f\x7f]+$")
-    category: Literal["accommodation", "food", "activities", "transport", "miscellaneous"]
+    description: str = Field(
+        min_length=1, max_length=160, pattern=r"^[^\x00-\x1f\x7f]+$"
+    )
+    category: Literal[
+        "accommodation", "food", "activities", "transport", "miscellaneous"
+    ]
     entry_type: Literal["planned", "actual"] = "planned"
     amount: str = Field(pattern=r"^\d{1,9}(?:\.\d{1,2})?$")
     currency: Literal["USD", "EUR", "GBP", "INR", "CAD", "AUD", "JPY"]
@@ -50,7 +54,9 @@ class MoveInput(StrictModel):
 
 class ReplaceInput(StrictModel):
     candidate_id: str = Field(pattern=r"^(node|way|relation)/[1-9][0-9]{0,18}$")
-    replacement_candidate_id: str = Field(pattern=r"^(node|way|relation)/[1-9][0-9]{0,18}$")
+    replacement_candidate_id: str = Field(
+        pattern=r"^(node|way|relation)/[1-9][0-9]{0,18}$"
+    )
 
 
 class HotelInput(StrictModel):

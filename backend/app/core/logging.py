@@ -10,7 +10,9 @@ logger = logging.getLogger("nomvira.requests")
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         request_id = uuid4().hex
         started = time.monotonic()
         response = await call_next(request)

@@ -7,7 +7,8 @@ import { getTrip } from "@/lib/trips/queries";
 import { formatTripDates } from "@/lib/travel-format";
 import { travelersLabel } from "@/lib/trips/dates";
 import { accommodationContext, hotelNights, roomsForTravelers } from "@/lib/accommodations/context";
-import { getCachedHotels, getStaySelection, validateHotelTrip } from "@/lib/accommodations/server";
+import { getStaySelection, loadCachedHotels, validateHotelTrip } from "@/lib/accommodations/server";
+import { TravelError } from "@/lib/destinations/backend";
 import { createClient } from "@/lib/supabase/server";
 import type { StaySelection } from "@/lib/accommodations/validation";
 
@@ -22,9 +23,18 @@ export default async function HotelsPage({ params }: Props) {
   let selection: StaySelection | null = null, selectionLoadFailed = false, canSearch = true;
   try { selection = await getStaySelection(await createClient(), trip.id); } catch { selectionLoadFailed = true; }
   try { validateHotelTrip(trip); } catch { canSearch = false; }
+  let initialResults: Awaited<ReturnType<typeof loadCachedHotels>> = null;
+  let cacheLoadFailed = false;
+  try {
+    initialResults = await loadCachedHotels(trip.owner_id, trip);
+  } catch (error) {
+    if (!(error instanceof TravelError)) throw error;
+    cacheLoadFailed = true;
+    console.warn("[hotels] cache_restore_failed", JSON.stringify({ code: error.code }));
+  }
   const nights = hotelNights(trip.start_date, trip.end_date), rooms = roomsForTravelers(trip.travelers_count);
   return <><PageHeader title={`Hotels in ${trip.destination_name}`} description={`${formatTripDates(trip.start_date, trip.end_date)} · ${nights} ${nights === 1 ? "night" : "nights"} · ${travelersLabel(trip.travelers_count)} · ${rooms} ${rooms === 1 ? "room" : "rooms"}`} />
     <TripNavigation tripId={trip.id} active="hotels" />
-    <HotelsWorkspace tripId={trip.id} currency={trip.currency} initialResults={getCachedHotels(trip.owner_id, trip)} initialSelection={selection} selectionLoadFailed={selectionLoadFailed} canSearch={canSearch} currentContext={accommodationContext(trip)} allowDemo={process.env.NODE_ENV === "development"} />
+    <HotelsWorkspace tripId={trip.id} currency={trip.currency} initialResults={initialResults} initialCacheLoadFailed={cacheLoadFailed} initialSelection={selection} selectionLoadFailed={selectionLoadFailed} canSearch={canSearch} currentContext={accommodationContext(trip)} allowDemo={process.env.NODE_ENV === "development"} />
   </>;
 }

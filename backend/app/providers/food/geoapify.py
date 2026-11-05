@@ -81,7 +81,9 @@ def normalize_food(feature: object) -> FoodCandidate | None:
     geometry = feature.get("geometry")
     coordinates = geometry.get("coordinates", []) if isinstance(geometry, dict) else []
     coordinates = (
-        coordinates if isinstance(coordinates, list) and len(coordinates) == 2 else [None, None]
+        coordinates
+        if isinstance(coordinates, list) and len(coordinates) == 2
+        else [None, None]
     )
     try:
         return FoodCandidate(
@@ -119,7 +121,9 @@ class GeoapifyFoodProvider(FoodProvider):
         key = self.settings.geoapify_api_key.get_secret_value()
         if not key:
             raise AppError("FOOD_CONFIGURATION_ERROR", MESSAGE, 503)
-        categories = [CATEGORIES[c] for c in dict.fromkeys(request.categories) if c in CATEGORIES]
+        categories = [
+            CATEGORIES[c] for c in dict.fromkeys(request.categories) if c in CATEGORIES
+        ]
         if not categories:
             return []
         radius = request.radius_meters or self.settings.default_food_radius_meters
@@ -136,7 +140,8 @@ class GeoapifyFoodProvider(FoodProvider):
             )
         try:
             response = await self.client.get(
-                f"{str(self.settings.geoapify_base_url).rstrip('/')}/v2/places", params=params
+                f"{str(self.settings.geoapify_base_url).rstrip('/')}/v2/places",
+                params=params,
             )
         except (httpx.HTTPError, ValueError):
             raise AppError("FOOD_PROVIDER_UNAVAILABLE", MESSAGE, 503) from None
@@ -154,5 +159,7 @@ class GeoapifyFoodProvider(FoodProvider):
         except (ValueError, TypeError):
             raise AppError("FOOD_PROVIDER_INVALID_RESPONSE", MESSAGE, 503) from None
         return [
-            candidate for feature in features if (candidate := normalize_food(feature)) is not None
+            candidate
+            for feature in features
+            if (candidate := normalize_food(feature)) is not None
         ]

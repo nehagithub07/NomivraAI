@@ -13,7 +13,11 @@ export const maxDuration = 120;
 // Authenticated requests for the same owned trip share one bounded backend fetch/write.
 const inFlight = new Map<string, Promise<{ places: NormalizedPlace[] }>>();
 export async function POST(request: Request, { params }: { params: Promise<{ tripId: string }> }) {
-  return travelRoute(request, z.object({}).strict(), async (_body, userId) => {
+  return travelRoute(
+    request,
+    z.object({
+      refresh: z.boolean().optional(),
+    }).strict(), async (body, userId) => {
     const { tripId } = await params;
     if (!z.uuid().safeParse(tripId).success) throw new TravelError("not_found", "Trip not found.", 404);
     const db = await createClient({ writable: true });
@@ -24,7 +28,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tri
     if (trip.destination_provider !== "open_meteo" || !trip.destination_provider_id || trip.destination_latitude === null || trip.destination_longitude === null) throw new TravelError("unresolved_destination", "This trip's destination details are not available yet.", 409);
     console.info("[places] discovery_requested");
     const places = await getPersistedPlaces(db, tripId);
-    if (places.length) {
+    if (places.length && !body.refresh) {
       console.info("[places] discovery_reused", { count: places.length });
       return { places };
     }
@@ -34,7 +38,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ tri
       return existing;
     }
     const discovery = (async () => {
-      const result = await callTravelApi("places/discover", { latitude: trip.destination_latitude, longitude: trip.destination_longitude }, discoveryResponseSchema);
+      const result = await callTravelApi(
+  "places/discover",
+  {
+    latitude:
+      trip.destination_latitude,
+
+    longitude:
+      trip.destination_longitude,
+
+    radius_meters: 30_000,
+
+    limit: 30,
+  },
+  discoveryResponseSchema,
+);
       const now = Math.floor(Date.now() / 1000);
       const payload = JSON.stringify({ kind: "discovery", user_id: userId, trip_id: tripId, expires_at: now + 300, refreshed_at: now, places: result.places });
       const { error: saveError } = await db.rpc("persist_trip_place_candidates", { p_payload: payload, p_signature: signProof(payload, internalKey()) });

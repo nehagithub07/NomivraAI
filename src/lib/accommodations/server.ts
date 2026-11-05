@@ -37,7 +37,7 @@ export function validateHotelTrip(trip: TripRow) {
   const nights = hotelNights(trip.start_date, trip.end_date);
   if (!Number.isFinite(nights) || nights < 1 || nights > 90 || trip.start_date < todayInTimeZone(trip.destination_timezone || "UTC")) throw new TravelError("invalid_stay", "Choose a future hotel stay of 1–90 nights.", 422);
 }
-const providerCodes = new Set(["ACCOMMODATION_CONFIGURATION_ERROR", "ACCOMMODATION_PROVIDER_AUTH_ERROR", "ACCOMMODATION_PROVIDER_QUOTA_EXCEEDED", "ACCOMMODATION_PROVIDER_UNAVAILABLE", "ACCOMMODATION_PROVIDER_INVALID_RESPONSE", "ACCOMMODATION_DESTINATION_UNRESOLVED", "ACCOMMODATION_RATE_LIMITED"]);
+const providerCodes = new Set(["ACCOMMODATION_CACHE_MISS", "ACCOMMODATION_CONFIGURATION_ERROR", "ACCOMMODATION_PROVIDER_AUTH_ERROR", "ACCOMMODATION_PROVIDER_QUOTA_EXCEEDED", "ACCOMMODATION_PROVIDER_UNAVAILABLE", "ACCOMMODATION_PROVIDER_INVALID_RESPONSE", "ACCOMMODATION_DESTINATION_UNRESOLVED", "ACCOMMODATION_RATE_LIMITED"]);
 export async function searchTripHotels(trip: TripRow, userId: string, refresh = false, demo = false, cacheOnly = false): Promise<HotelSearchResults> {
   validateHotelTrip(trip);
   if (demo && process.env.NODE_ENV === "production") throw new TravelError("ACCOMMODATION_CONFIGURATION_ERROR", "Demo search is disabled in production.");
@@ -83,4 +83,18 @@ export async function searchTripHotels(trip: TripRow, userId: string, refresh = 
   recentSearches.set(searchKey(userId, trip, demo), signed);
   if (recentSearches.size > 128) recentSearches.delete(recentSearches.keys().next().value!);
   return structuredClone(signed);
+}
+
+export async function loadCachedHotels(userId: string, trip: TripRow): Promise<HotelSearchResults | null> {
+  const cached = getCachedHotels(userId, trip);
+  if (cached) return cached;
+
+  try {
+    return await searchTripHotels(trip, userId, false, false, true);
+  } catch (error) {
+    if (error instanceof TravelError && error.code === "ACCOMMODATION_CACHE_MISS") {
+      return null;
+    }
+    throw error;
+  }
 }

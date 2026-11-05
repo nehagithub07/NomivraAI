@@ -12,7 +12,9 @@ class DestinationSearchCache:
     def __init__(self, ttl_seconds: float = 300, max_entries: int = 128):
         self.ttl_seconds = ttl_seconds
         self.max_entries = max_entries
-        self.entries: OrderedDict[tuple, tuple[float, DestinationSearchResponse]] = OrderedDict()
+        self.entries: OrderedDict[tuple, tuple[float, DestinationSearchResponse]] = (
+            OrderedDict()
+        )
         self.pending: dict[tuple, asyncio.Task[DestinationSearchResponse]] = {}
 
     async def get_or_load(
@@ -38,7 +40,9 @@ class DestinationSearchCache:
                     self.pending.pop(key, None)
 
             task = asyncio.create_task(fill())
-            task.add_done_callback(lambda done: None if done.cancelled() else done.exception())
+            task.add_done_callback(
+                lambda done: None if done.cancelled() else done.exception()
+            )
             self.pending[key] = task
         # A cancelled waiter must not cancel another user's identical search.
         return (await asyncio.shield(task)).model_copy(deep=True)

@@ -8,7 +8,9 @@ class DestinationService:
     def __init__(self, geocoding: GeocodingProvider):
         self.geocoding = geocoding
 
-    async def search(self, request: DestinationSearchRequest) -> DestinationSearchResponse:
+    async def search(
+        self, request: DestinationSearchRequest
+    ) -> DestinationSearchResponse:
         return DestinationSearchResponse(
             destinations=await self.geocoding.search(
                 request.q, request.limit, request.language, request.country_code

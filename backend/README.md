@@ -8,13 +8,13 @@ Python **3.12+**; verified with Python 3.13 on Windows. Next.js remains at the p
 | --- | --- | --- |
 | Destination search, coordinates and timezone | `OpenMeteoGeocodingProvider` | `https://geocoding-api.open-meteo.com/v1/search` |
 | Optional canonical ID lookup | Same geocoding adapter | `https://geocoding-api.open-meteo.com/v1/get?id=…` |
-| Attractions, museums, parks and historic POIs | `OpenStreetMapOverpassProvider` | Configurable `https://overpass-api.de/api/interpreter` |
+| Attractions, museums, parks and historic POIs | `OpenStreetMapOverpassProvider` with Geoapify Places fallback | Configurable Overpass endpoints, then `https://api.geoapify.com/v2/places` |
 
 **Free/no-key public access suitable for current non-commercial development, subject to provider usage and licensing policies.** This is not an unlimited-free production service claim.
 
 [Open-Meteo's terms](https://open-meteo.com/en/terms) restrict free service access to non-commercial use and list limits below 10,000 calls/day, 5,000/hour and 600/minute; review the current terms before deployment. Data is provided under CC BY 4.0 and the geocoding source is GeoNames. A commercial product, advertising, subscriptions or higher traffic requires a suitable provider plan, licensed service or self-hosted alternative. This step does not add weather.
 
-[Public Overpass infrastructure](https://dev.overpass-api.de/overpass-doc/en/preface/commons.html) is shared, subject to rate limits, overload and timeouts, and has no production SLA. The operator discourages treating its public instance as the backend for a broadly deployed app. Keep current use to development; review/self-host or select an appropriate service before scaling. Set an identifying `PROVIDER_USER_AGENT`, ideally including a real project contact/URL; never invent contact details. Instances can be changed through configuration, not browser input. No automatic endpoint rotation or retry storm is implemented.
+[Public Overpass infrastructure](https://dev.overpass-api.de/overpass-doc/en/preface/commons.html) is shared, subject to rate limits, overload and timeouts, and has no production SLA. The operator discourages treating its public instance as the backend for a broadly deployed app. Keep current use to development; review/self-host or select an appropriate service before scaling. Set an identifying `PROVIDER_USER_AGENT`, ideally including a real project contact/URL; never invent contact details. Instances can be changed through configuration, not browser input. If every configured Overpass endpoint fails, discovery uses Geoapify Places when `GEOAPIFY_API_KEY` is configured; this can consume Geoapify quota. Fallback results are accepted only when they include an OpenStreetMap object ID, preserving stable OSM identity and attribution.
 
 [OSM data is ODbL](https://www.openstreetmap.org/copyright). Attribution and applicable share-alike obligations apply to distribution/adapted databases. UI credits link to the provider/source and license:
 

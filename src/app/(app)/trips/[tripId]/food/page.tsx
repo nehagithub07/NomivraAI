@@ -19,5 +19,5 @@ export default async function FoodPage({ params }: Props) {
   let selections: FoodSelection[] = [], selectionLoadFailed = false, canSearch = true;
   try { selections = await getFoodSelections(await createClient(), trip.id); } catch { selectionLoadFailed = true; }
   try { validateFoodTrip(trip); } catch { canSearch = false; }
-  return <><PageHeader title={`Food in ${trip.destination_name}`} description="Find restaurants, cafes and local food that match your trip." /><TripNavigation tripId={trip.id} active="food" /><FoodWorkspace tripId={trip.id} initialResults={getCachedFood(trip.owner_id, trip)} initialSelections={selections} initialDiets={trip.dietary_preferences} selectionLoadFailed={selectionLoadFailed} canSearch={canSearch} allowDemo={process.env.NODE_ENV === "development"} /></>;
+  return <><PageHeader title={`Food in ${trip.destination_name}`} description="Find restaurants, cafes and local food that match your trip." /><TripNavigation tripId={trip.id} active="food" />  <FoodWorkspace tripId={trip.id} destinationName={trip.destination_name} destinationCountry={trip.destination_country} initialResults={getCachedFood(trip.owner_id, trip)} initialSelections={selections} initialDiets={trip.dietary_preferences} selectionLoadFailed={selectionLoadFailed} canSearch={canSearch} allowDemo={process.env.NODE_ENV === "development"} /></>;
 }

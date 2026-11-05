@@ -5,7 +5,14 @@ from pydantic import ConfigDict, Field
 from app.schemas.destination import Coordinates
 
 PlaceCategory = Literal[
-    "attraction", "museum", "viewpoint", "historic", "monument", "park", "gallery", "arts_centre"
+    "attraction",
+    "museum",
+    "viewpoint",
+    "historic",
+    "monument",
+    "park",
+    "gallery",
+    "arts_centre",
 ]
 
 
@@ -23,6 +30,7 @@ class PlaceDiscoveryRequest(Coordinates):
         ge=1,
         le=30,
     )
+
 
 class PlaceCandidate(Coordinates):
     provider: Literal["openstreetmap"] = "openstreetmap"

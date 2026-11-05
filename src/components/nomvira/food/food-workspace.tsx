@@ -9,15 +9,18 @@ import { FoodFiltersPanel } from "./food-filters";
 import { FoodAttribution } from "./food-attribution";
 import { FoodSkeletons } from "./food-skeletons";
 import { defaultFoodFilters, foodCategoryLabels, filterAndSortFood, type FoodFilters } from "@/lib/food/catalog";
+import { getDestinationFoodGuide } from "@/lib/food/signature-dishes";
 import { foodErrorMessage } from "@/lib/food/errors";
 import { foodCategories, foodDiets, foodSelectionSchema, signedFoodResponseSchema, type FoodCandidate, type FoodResults, type FoodSelection, type FoodSort, type FoodSearchOptions } from "@/lib/food/validation";
 import { z } from "zod";
 
-export function FoodWorkspace({ tripId, initialResults, initialSelections, initialDiets, selectionLoadFailed, canSearch, allowDemo }: {
-  tripId: string; initialResults: FoodResults | null; initialSelections: FoodSelection[]; initialDiets: string[];
+export function FoodWorkspace({ tripId, destinationName, destinationCountry, initialResults, initialSelections, initialDiets, selectionLoadFailed, canSearch, allowDemo }: {
+  tripId: string; destinationName: string; destinationCountry?: string | null; initialResults: FoodResults | null; initialSelections: FoodSelection[]; initialDiets: string[];
   selectionLoadFailed: boolean; canSearch: boolean; allowDemo: boolean;
 }) {
   const [results, setResults] = useState(initialResults), [selections, setSelections] = useState(initialSelections);
+  const foodGuide = getDestinationFoodGuide(destinationName, destinationCountry);
+  const signatureDishes = foodGuide?.dishes ?? [];
   const initialFilters = { ...defaultFoodFilters, diets: initialDiets };
   const [filters, setFilters] = useState<FoodFilters>(initialFilters), [searchedFilters, setSearchedFilters] = useState(JSON.stringify(initialFilters));
   const [sort, setSort] = useState<FoodSort>("recommended"), [loading, setLoading] = useState(false), [expired, setExpired] = useState(false);
@@ -78,7 +81,7 @@ export function FoodWorkspace({ tripId, initialResults, initialSelections, initi
       {selectionsUnavailable && <p className="type-small mt-3 text-muted-foreground">Your saved places couldn&apos;t be loaded. Reload to check them; saving may need a database setup update.</p>}
       {selections.length === 0 && !selectionsUnavailable && <p className="type-small mt-3 text-muted-foreground">Save a breakfast cafe, a local restaurant, or somewhere for the evening.</p>}
       {selections.length > 0 && <ul className="mt-4 divide-y">{selections.map(selection => <li key={selection.id} className="flex min-w-0 flex-wrap items-center justify-between gap-3 py-3"><div className="min-w-0"><p className="type-small font-medium wrap-anywhere">{selection.name}</p><p className="type-meta text-muted-foreground">{foodCategoryLabels[selection.category]}{selection.provider === "fixture" ? " · Demo place" : " · Geoapify"}</p></div><Button variant="secondary" disabled={saving !== null} aria-label={`Remove ${selection.name} from trip`} onClick={event => { removeTrigger.current = event.currentTarget; setError(null); setRemoving(selection); }}>Remove</Button></li>)}</ul>}
-      {selections.some(selection => selection.provider === "geoapify") && <div className="mt-4"><FoodAttribution /></div>}
+      {selections.some(selection => selection.provider !== "fixture") && <div className="mt-4"><FoodAttribution provider={selections.find(selection => selection.provider !== "fixture")?.provider} /></div>}
     </section>
 
     <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex min-w-0 flex-wrap items-center gap-3"><label className="sr-only" htmlFor="food-sort">Sort food spots</label><select id="food-sort" className="type-small min-h-11 max-w-full rounded-xl border bg-card px-3" value={sort} onChange={event => setSort(event.target.value as FoodSort)}><option value="recommended">Recommended</option><option value="distance">Distance</option><option value="name">Name A–Z</option></select>
@@ -95,12 +98,42 @@ export function FoodWorkspace({ tripId, initialResults, initialSelections, initi
         {preferencesChanged && results && <p role="status" className="type-small rounded-xl border bg-card p-4">Preferences changed. Search again to update recommendations.</p>}
         {results?.demo && <div className="type-small rounded-xl border border-accent bg-accent/30 p-4"><p className="font-semibold">Demo food data</p><p className="mt-1">These places are fictional development examples.</p></div>}
         {(filters.diets.length > 0 || results?.dietary_fallback) && <p className="type-small text-muted-foreground">Some results may not have confirmed dietary information. Dietary information is provider-supplied. Confirm directly with the restaurant when necessary.</p>}
+        {signatureDishes.length > 0 && (
+          <div className="space-y-3 rounded-2xl border bg-card p-4">
+            <div>
+              <h2 className="type-title">Famous foods of {foodGuide?.city}</h2>
+              {results && !results.demo && (
+  <p className="type-small text-muted-foreground">
+    Live recommendations show venues with a verified rating of 4.0 or higher.
+  </p>
+)}
+            </div>
+            <ul className="grid gap-2 sm:grid-cols-2">
+              {signatureDishes.map((dish) => (
+                <li key={dish} className="rounded-lg bg-muted/50 px-3 py-2 text-sm">
+                  {dish}
+                </li>
+              ))}
+            </ul>
+            <a
+              href={foodGuide?.source.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="type-small text-primary underline"
+            >
+              Source: {foodGuide?.source.label}
+            </a>
+          </div>
+        )}
+        <p className="type-small text-muted-foreground">
+          Recommendations include venues rated at least 4.0 out of 5. Ratings come from Google Maps via StayAPI.
+        </p>
         {loading ? <FoodSkeletons /> : expired ? <div role="status" className="rounded-2xl border bg-card p-6"><p className="type-small">These results have expired. Search again before saving a place. Your saved food spots remain available.</p></div> : !results ? <div className="rounded-2xl border bg-card px-5 py-14 text-center"><Utensils className="mx-auto size-9 text-muted-foreground" strokeWidth={1.25} aria-hidden="true" /><h2 className="type-body mt-5 font-semibold">Find your next food stop</h2><p className="type-small mx-auto mt-2 max-w-sm text-muted-foreground">Discover restaurants, cafes and local food around your destination. Start with a search.</p></div> : visible.length === 0 ? <div className="rounded-2xl border bg-card p-8 text-center"><h2 className="type-body font-semibold">No food spots match these filters.</h2><p className="type-small mt-3 text-muted-foreground">Try increasing the distance, removing a cuisine filter, or relaxing dietary filters, then search again.</p></div> : <><p className="type-small text-muted-foreground">{visible.length} food spots · straight-line distances</p><div className="grid gap-5 sm:grid-cols-2">{visible.map(food => <FoodCard key={savedKey(food)} food={food} badgesActive={!preferencesChanged} saved={savedKeys.has(savedKey(food))} saving={saving === savedKey(food)} disabled={saving !== null || expired} onSave={() => mutate(food, "POST")} onDetails={button => { detailsTrigger.current = button; setDetails(food); }} />)}</div></>}
-        {results && <><p className="type-meta text-muted-foreground">Nomivra Pick is the highest deterministic recommendation score, based on your active preferences, distance and supplied information.</p><FoodAttribution demo={results.demo} /></>}
+        {results && <><p className="type-meta text-muted-foreground">Nomivra Pick is the highest deterministic recommendation score, based on your active preferences, distance and supplied information.</p><FoodAttribution demo={results.demo} provider={results.provider} /></>}
       </section>
     </div>
 
-    <Sheet open={details !== null} onOpenChange={open => { if (!open) setDetails(null); }}><SheetContent className="w-96 p-6 pt-20" closeLabel="Close food details" onCloseAutoFocus={event => { event.preventDefault(); detailsTrigger.current?.focus(); }}><SheetTitle className="type-body font-semibold wrap-anywhere">{details?.name}</SheetTitle><SheetDescription className="type-small mt-2 text-muted-foreground">{details && [foodCategoryLabels[details.category], ...details.cuisine_types].join(" · ")}</SheetDescription>{details && <div className="type-small mt-5 space-y-5"><DietaryIndicators tags={details.dietary_tags} />{details.address && <p className="wrap-anywhere">{details.address}</p>}{details.distance_km !== null && <p>{details.distance_km.toFixed(1)} km from destination center</p>}{details.opening_hours ? <div><p className="font-medium">Provider-supplied opening hours</p><p className="mt-1 wrap-anywhere">{details.opening_hours}</p></div> : <p className="text-muted-foreground">Opening hours not supplied.</p>}{details.website && <a className="inline-flex min-h-11 items-center font-medium underline underline-offset-4" href={details.website} target="_blank" rel="noopener noreferrer">Visit website</a>}<p className="text-muted-foreground">Dietary information is provider-supplied. Confirm directly with the restaurant when necessary.</p><FoodAttribution demo={results?.demo} /></div>}</SheetContent></Sheet>
+    <Sheet open={details !== null} onOpenChange={open => { if (!open) setDetails(null); }}><SheetContent className="w-96 p-6 pt-20" closeLabel="Close food details" onCloseAutoFocus={event => { event.preventDefault(); detailsTrigger.current?.focus(); }}><SheetTitle className="type-body font-semibold wrap-anywhere">{details?.name}</SheetTitle><SheetDescription className="type-small mt-2 text-muted-foreground">{details && [foodCategoryLabels[details.category], ...details.cuisine_types].join(" · ")}</SheetDescription>{details && <div className="type-small mt-5 space-y-5"><DietaryIndicators tags={details.dietary_tags} />{details.address && <p className="wrap-anywhere">{details.address}</p>}{details.distance_km !== null && <p>{details.distance_km.toFixed(1)} km from destination center</p>}{details.opening_hours ? <div><p className="font-medium">Provider-supplied opening hours</p><p className="mt-1 wrap-anywhere">{details.opening_hours}</p></div> : <p className="text-muted-foreground">Opening hours not supplied.</p>}{details.website && <a className="inline-flex min-h-11 items-center font-medium underline underline-offset-4" href={details.website} target="_blank" rel="noopener noreferrer">Visit website</a>}<p className="text-muted-foreground">Dietary information is provider-supplied. Confirm directly with the restaurant when necessary.</p><FoodAttribution demo={results?.demo} provider={results?.provider} /></div>}</SheetContent></Sheet>
     <Sheet open={removing !== null} onOpenChange={open => { if (!open && !saving) setRemoving(null); }}><SheetContent role="alertdialog" className="w-96 p-6 pt-20" closeLabel="Cancel removal" onCloseAutoFocus={event => { event.preventDefault(); if (removeTrigger.current?.isConnected) removeTrigger.current.focus(); else savedHeading.current?.focus(); }}><SheetTitle className="type-body font-semibold">Remove this food spot?</SheetTitle><SheetDescription className="type-small mt-3 text-muted-foreground">{removing?.name} will be removed from this trip. You can save it again from search results.</SheetDescription>{error && <p role="alert" className="type-small mt-4">{error}</p>}<div className="mt-6 flex flex-wrap gap-3"><Button variant="secondary" disabled={saving !== null} onClick={() => setRemoving(null)}>Keep place</Button><Button loading={saving !== null} disabled={saving !== null} onClick={() => removing && mutate(removing, "DELETE")}>Remove from trip</Button></div></SheetContent></Sheet>
   </div>;
 }

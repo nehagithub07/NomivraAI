@@ -53,18 +53,26 @@ class WeatherService:
         )
         empty = WeatherForecast(
             **base,
-            availability="past_trip"
-            if request.end_date < today
-            else ("not_yet_available" if request.start_date > horizon else "unavailable"),
+            availability=(
+                "past_trip"
+                if request.end_date < today
+                else (
+                    "not_yet_available"
+                    if request.start_date > horizon
+                    else "unavailable"
+                )
+            ),
         )
         if empty.availability != "unavailable":
             empty.uncovered_ranges = [
                 CoverageGap(
                     start_date=request.start_date,
                     end_date=request.end_date,
-                    reason="past"
-                    if empty.availability == "past_trip"
-                    else "outside_forecast_window",
+                    reason=(
+                        "past"
+                        if empty.availability == "past_trip"
+                        else "outside_forecast_window"
+                    ),
                 )
             ]
             return empty
@@ -89,17 +97,23 @@ class WeatherService:
             )
         if clock - self.attempts.get(key, float("-inf")) < REFRESH_COOLDOWN_SECONDS:
             raise AppError(
-                "WEATHER_RATE_LIMITED", "Please wait a minute before refreshing weather.", 429
+                "WEATHER_RATE_LIMITED",
+                "Please wait a minute before refreshing weather.",
+                429,
             )
         if len(self.pending) >= MAX_IN_FLIGHT:
             raise AppError(
-                "WEATHER_RATE_LIMITED", "Weather is busy. Please try again shortly.", 429
+                "WEATHER_RATE_LIMITED",
+                "Weather is busy. Please try again shortly.",
+                429,
             )
         while self.global_events and clock - self.global_events[0] >= 60:
             self.global_events.popleft()
         if len(self.global_events) >= 60:
             raise AppError(
-                "WEATHER_RATE_LIMITED", "Weather is busy. Please try again shortly.", 429
+                "WEATHER_RATE_LIMITED",
+                "Weather is busy. Please try again shortly.",
+                429,
             )
         self.global_events.append(clock)
         self.attempts[key] = clock
@@ -120,7 +134,9 @@ class WeatherService:
                 days = [
                     day
                     for day in days
-                    if max(request.start_date, today) <= day.date <= min(request.end_date, horizon)
+                    if max(request.start_date, today)
+                    <= day.date
+                    <= min(request.end_date, horizon)
                 ]
                 fetched = datetime.now(UTC)
                 result = WeatherForecast(
@@ -128,11 +144,11 @@ class WeatherService:
                     fetched_at=fetched,
                     expires_at=fetched + timedelta(seconds=CACHE_TTL_SECONDS),
                     days=days,
-                    availability="available"
-                    if len(days) == (request.end_date - request.start_date).days + 1
-                    else "partially_available"
-                    if days
-                    else "unavailable",
+                    availability=(
+                        "available"
+                        if len(days) == (request.end_date - request.start_date).days + 1
+                        else "partially_available" if days else "unavailable"
+                    ),
                 )
                 # Describe missing ranges without allocating one object per trip day.
                 cursor = request.start_date
@@ -156,7 +172,9 @@ class WeatherService:
                     for first, last, reason in sections:
                         if first <= last:
                             result.uncovered_ranges.append(
-                                CoverageGap(start_date=first, end_date=last, reason=reason)
+                                CoverageGap(
+                                    start_date=first, end_date=last, reason=reason
+                                )
                             )
                 self.entries[key] = (time.monotonic() + CACHE_TTL_SECONDS, result)
                 self.entries.move_to_end(key)
@@ -173,5 +191,7 @@ class WeatherService:
 
         task = asyncio.create_task(load())
         self.pending[key] = task
-        task.add_done_callback(lambda done: None if done.cancelled() else done.exception())
+        task.add_done_callback(
+            lambda done: None if done.cancelled() else done.exception()
+        )
         return (await asyncio.shield(task)).model_copy(deep=True)

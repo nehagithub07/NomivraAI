@@ -8,7 +8,7 @@ import { signProof } from "../src/lib/destinations/proof.ts";
 import { destination } from "./destination-fixtures.mjs";
 
 const userId = "00000000-0000-4000-8000-000000000001", key = "test-internal-application-key-never-real";
-const files = ["20261028000100_create_trips.sql", "20261028000200_destination_intelligence.sql", "20261028000300_open_destination_providers.sql", "20261028000400_accommodation_selections.sql", "20261029000500_food_selections.sql", "20261029000600_itinerary_versions.sql", "20261029000700_trip_budget_entries.sql", "20261030000800_weather_adaptation.sql", "20261030000900_ai_companion.sql"];
+const files = ["20261028000100_create_trips.sql", "20261028000200_destination_intelligence.sql", "20261028000300_open_destination_providers.sql", "20261028000400_accommodation_selections.sql", "20261029000500_food_selections.sql", "20261029000600_itinerary_versions.sql", "20261029000700_trip_budget_entries.sql", "20261030000800_weather_adaptation.sql", "20261030000900_ai_companion.sql", "20261030001000_place_refresh_and_map_backfill.sql", "20261105001100_rated_food_provider.sql"];
 const migrations = await Promise.all(files.map(name => readFile(new URL(`../supabase/migrations/${name}`, import.meta.url), "utf8")));
 
 for (const installed of [1, 2, 3, 4, 5, 6, 7, 8, 9]) test(`prepared database setup upgrades stage ${installed}, saves a signed trip and is safe to rerun`, async () => {
@@ -20,7 +20,8 @@ for (const installed of [1, 2, 3, 4, 5, 6, 7, 8, 9]) test(`prepared database set
       grant usage on schema auth to anon,authenticated;
       insert into auth.users values ('${userId}');`);
     for (let index = 0; index < installed; index++) await db.exec(migrations[index]);
-    const setup = buildTripDatabaseSetup(migrations[1], migrations[2], key, ...migrations.slice(3));
+    const fixes = migrations.slice(9).map(sql => sql.replace(/^\s*begin;\s*/i, "").replace(/\s*commit;\s*$/i, "")).join("\n");
+    const setup = buildTripDatabaseSetup(migrations[1], migrations[2], key, ...migrations.slice(3, 9), fixes);
     await db.exec(setup);
     assert.equal((await db.query("select to_regclass('public.companion_pending_actions')::text as name")).rows[0].name, "companion_pending_actions");
     assert.equal((await db.query("select to_regclass('public.trip_budget_entries')::text as name")).rows[0].name, "trip_budget_entries");

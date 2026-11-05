@@ -7,7 +7,14 @@ from zoneinfo import ZoneInfo
 import httpx
 import pytest
 from pydantic import ValidationError
-from test_itineraries import KEY, USER, ScriptedProvider, dense_planning, planning, sdk_transport
+from test_itineraries import (
+    KEY,
+    USER,
+    ScriptedProvider,
+    dense_planning,
+    planning,
+    sdk_transport,
+)
 
 from app.core.config import Settings
 from app.core.errors import AppError
@@ -31,7 +38,11 @@ from app.schemas.weather import (
 )
 from app.services.itinerary_generation_service import ItineraryGenerationService
 from app.services.weather_adaptation_service import WeatherAdaptationService
-from app.services.weather_risk_service import classify_setting, detect_conflicts, evaluate_risk
+from app.services.weather_risk_service import (
+    classify_setting,
+    detect_conflicts,
+    evaluate_risk,
+)
 from app.services.weather_service import WeatherService
 
 NOW = datetime(2026, 10, 30, 12, tzinfo=UTC)
@@ -69,17 +80,27 @@ def raw_weather(day=None, timezone="UTC", count=1):
 
     def units(variables):
         return {
-            key: "°C"
-            if "temperature" in key
-            else "km/h"
-            if "wind_speed" in key
-            else "%"
-            if "probability" in key
-            else "mm"
-            if "precipitation" in key
-            else "unixtime"
-            if key in ("sunrise", "sunset")
-            else "wmo code"
+            key: (
+                "°C"
+                if "temperature" in key
+                else (
+                    "km/h"
+                    if "wind_speed" in key
+                    else (
+                        "%"
+                        if "probability" in key
+                        else (
+                            "mm"
+                            if "precipitation" in key
+                            else (
+                                "unixtime"
+                                if key in ("sunrise", "sunset")
+                                else "wmo code"
+                            )
+                        )
+                    )
+                )
+            )
             for key in variables
         }
 
@@ -142,7 +163,11 @@ def test_normalization_aggregates_destination_local_periods_without_losing_extre
     assert evening.precipitation_probability == 70
     assert morning.apparent_temperature_max_c == 39
     assert morning.weather_code == 95 and morning.risk.level == "high"
-    assert morning.risk.reasons == ["precipitation", "temperature_extreme", "thunderstorm"]
+    assert morning.risk.reasons == [
+        "precipitation",
+        "temperature_extreme",
+        "thunderstorm",
+    ]
     assert morning.temperature_c == 20
     assert days[0].sunrise.tzinfo == ZoneInfo("Asia/Tokyo")
 
@@ -198,7 +223,9 @@ def test_conflicts_are_conservative_for_indoor_unknown_and_mixed_places():
             title=category,
             category=category,
         )
-        for index, category in enumerate(["park", "museum", "gallery", "historic", "attraction"])
+        for index, category in enumerate(
+            ["park", "museum", "gallery", "historic", "attraction"]
+        )
     ]
     conflicts = detect_conflicts(forecast, items)
     assert [item.title for item in conflicts] == ["park", "historic"]
@@ -249,13 +276,15 @@ async def test_weather_provider_failure_mapping_and_no_retries(mode, code):
             raise httpx.ReadTimeout("PRIVATE details")
         if mode == "connection":
             raise httpx.ConnectError("PRIVATE details")
-        return httpx.Response(429 if mode == "429" else 200, json={"PRIVATE": "invalid"})
+        return httpx.Response(
+            429 if mode == "429" else 200, json={"PRIVATE": "invalid"}
+        )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         with pytest.raises(AppError) as error:
-            await OpenMeteoWeatherProvider(client, "https://api.open-meteo.com/v1").forecast(
-                35, 139, "UTC", NOW.date(), NOW.date()
-            )
+            await OpenMeteoWeatherProvider(
+                client, "https://api.open-meteo.com/v1"
+            ).forecast(35, 139, "UTC", NOW.date(), NOW.date())
     assert error.value.code == code and "PRIVATE" not in error.value.message
     assert len(calls) == 1
 
@@ -290,7 +319,8 @@ class FakeWeatherProvider:
             []
             if self.missing
             else [
-                DailyWeather(date=first + timedelta(days=i)) for i in range((last - first).days + 1)
+                DailyWeather(date=first + timedelta(days=i))
+                for i in range((last - first).days + 1)
             ]
         )
 
@@ -298,7 +328,9 @@ class FakeWeatherProvider:
 async def test_cache_only_tab_navigation_singleflight_refresh_and_bounded_cooldown():
     provider = FakeWeatherProvider()
     service = WeatherService(provider)
-    assert (await service.forecast(request(cache_only=True), now=NOW)).availability == "unavailable"
+    assert (
+        await service.forecast(request(cache_only=True), now=NOW)
+    ).availability == "unavailable"
     assert provider.calls == []
     first, duplicate = await asyncio.gather(
         service.forecast(request(), now=NOW), service.forecast(request(), now=NOW)
@@ -325,7 +357,9 @@ async def test_future_and_past_trips_do_not_call_forecast_provider(days, state):
         ),
         now=NOW,
     )
-    assert result.availability == state and not result.days and result.fetched_at is None
+    assert (
+        result.availability == state and not result.days and result.fetched_at is None
+    )
     assert provider.calls == []
 
 
@@ -334,15 +368,22 @@ async def test_partial_coverage_returns_only_real_dates_and_missing_ranges():
     service = WeatherService(provider)
     value = await service.forecast(
         request(
-            start_date=NOW.date() - timedelta(days=2), end_date=NOW.date() + timedelta(days=30)
+            start_date=NOW.date() - timedelta(days=2),
+            end_date=NOW.date() + timedelta(days=30),
         ),
         now=NOW,
     )
     assert value.availability == "partially_available" and len(value.days) == 16
-    assert [gap.reason for gap in value.uncovered_ranges] == ["past", "outside_forecast_window"]
-    empty = await WeatherService(FakeWeatherProvider(missing=True)).forecast(request(), now=NOW)
+    assert [gap.reason for gap in value.uncovered_ranges] == [
+        "past",
+        "outside_forecast_window",
+    ]
+    empty = await WeatherService(FakeWeatherProvider(missing=True)).forecast(
+        request(), now=NOW
+    )
     assert (
-        empty.availability == "unavailable" and empty.uncovered_ranges[0].reason == "missing_data"
+        empty.availability == "unavailable"
+        and empty.uncovered_ranges[0].reason == "missing_data"
     )
 
 
@@ -378,7 +419,9 @@ def adaptation_fixture():
         }
     )
     forecast = WeatherForecast(
-        **request(end_date=context.end_date).model_dump(exclude={"refresh", "cache_only"}),
+        **request(end_date=context.end_date).model_dump(
+            exclude={"refresh", "cache_only"}
+        ),
         availability="available",
         fetched_at=NOW,
         days=[
@@ -437,7 +480,9 @@ async def test_weather_adaptation_preserves_original_ids_outside_generation_shor
     assert result.itinerary.days[2].items[0].candidate_id == "node/3"
 
 
-@pytest.mark.parametrize("case", ["unknown", "date", "capacity", "unaffected", "uncovered", "food"])
+@pytest.mark.parametrize(
+    "case", ["unknown", "date", "capacity", "unaffected", "uncovered", "food"]
+)
 async def test_invalid_weather_adaptation_has_one_repair(
     case,
 ):
@@ -475,7 +520,9 @@ async def test_two_bad_adaptations_fail_without_an_infinite_repair_loop():
     engine = ItineraryGenerationService(Settings(_env_file=None), provider)
     with pytest.raises(AppError) as error:
         await WeatherAdaptationService(weather, engine).adapt(req)
-    assert error.value.code == "ITINERARY_VALIDATION_FAILED" and len(provider.calls) == 2
+    assert (
+        error.value.code == "ITINERARY_VALIDATION_FAILED" and len(provider.calls) == 2
+    )
 
 
 async def test_no_conflicts_or_no_forecast_never_calls_gemini():
@@ -494,10 +541,15 @@ async def test_no_conflicts_or_no_forecast_never_calls_gemini():
 
 async def test_unchanged_valid_adaptation_warns_about_unresolved_weather_conflicts():
     req, original, _, _, weather = adaptation_fixture()
-    engine = ItineraryGenerationService(Settings(_env_file=None), ScriptedProvider([original]))
+    engine = ItineraryGenerationService(
+        Settings(_env_file=None), ScriptedProvider([original])
+    )
     result = await WeatherAdaptationService(weather, engine).adapt(req)
     assert not result.changed and result.remaining_conflicts
-    assert any("still have weather conflicts" in warning for warning in result.itinerary.warnings)
+    assert any(
+        "still have weather conflicts" in warning
+        for warning in result.itinerary.warnings
+    )
 
 
 async def test_weather_routes_require_internal_auth_and_validate_inputs_safely():
@@ -507,15 +559,21 @@ async def test_weather_routes_require_internal_auth_and_validate_inputs_safely()
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as client:
         body = {"forecast": request().model_dump(mode="json")}
-        assert (await client.post("/api/v1/weather/forecast", json=body)).status_code == 401
+        assert (
+            await client.post("/api/v1/weather/forecast", json=body)
+        ).status_code == 401
         body["forecast"]["timezone"] = "PRIVATE invalid zone"
         response = await client.post(
-            "/api/v1/weather/forecast", json=body, headers={"X-Nomvira-Internal-Key": KEY}
+            "/api/v1/weather/forecast",
+            json=body,
+            headers={"X-Nomvira-Internal-Key": KEY},
         )
         assert response.status_code == 422 and "PRIVATE" not in response.text
 
 
-async def test_gemini_reuses_structured_sdk_with_weather_prompt_and_normalized_facts(monkeypatch):
+async def test_gemini_reuses_structured_sdk_with_weather_prompt_and_normalized_facts(
+    monkeypatch,
+):
     req, _, fixed, _, weather = adaptation_fixture()
     captured = []
 
@@ -524,7 +582,9 @@ async def test_gemini_reuses_structured_sdk_with_weather_prompt_and_normalized_f
         payload = json.loads(request.content)
         content = json.loads(payload["contents"][0]["parts"][0]["text"])
         assert "itinerary adaptation planner" in str(payload["systemInstruction"])
-        assert content["planning_context"]["verified_weather"]["provider"] == "open_meteo"
+        assert (
+            content["planning_context"]["verified_weather"]["provider"] == "open_meteo"
+        )
         assert content["planning_context"]["conflicts"][0]["risk_level"] == "high"
         assert content["planning_context"]["slot_scores"]
         assert "user_id" not in str(content) and "trip_id" not in str(content)
@@ -535,7 +595,10 @@ async def test_gemini_reuses_structured_sdk_with_weather_prompt_and_normalized_f
             json={
                 "candidates": [
                     {
-                        "content": {"role": "model", "parts": [{"text": fixed.model_dump_json()}]},
+                        "content": {
+                            "role": "model",
+                            "parts": [{"text": fixed.model_dump_json()}],
+                        },
                         "finishReason": "STOP",
                     }
                 ]

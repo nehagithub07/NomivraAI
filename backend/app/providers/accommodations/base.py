@@ -5,5 +5,7 @@ from app.schemas.accommodation import AccommodationCandidate, AccommodationSearc
 
 class AccommodationProvider(ABC):
     @abstractmethod
-    async def search(self, request: AccommodationSearchRequest) -> list[AccommodationCandidate]:
+    async def search(
+        self, request: AccommodationSearchRequest
+    ) -> list[AccommodationCandidate]:
         """Return normalized inventory. Selection never creates a booking."""

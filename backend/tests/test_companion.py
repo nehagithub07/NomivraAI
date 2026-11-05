@@ -117,7 +117,11 @@ def test_registry_has_only_explicit_tools_and_two_permissions():
         ("find_trip_places", {"limit": 100}),
         (
             "move_itinerary_activity",
-            {"candidate_id": "foreign-id", "target_date": "day_2", "target_period": "afternoon"},
+            {
+                "candidate_id": "foreign-id",
+                "target_date": "day_2",
+                "target_period": "afternoon",
+            },
         ),
     ],
 )
@@ -283,7 +287,8 @@ async def test_two_write_actions_rejected_and_mutation_cannot_report_executed():
 
 
 @pytest.mark.parametrize(
-    "exception", [TimeoutError(), AppError("COMPANION_PROVIDER_RATE_LIMITED", "Safe error", 429)]
+    "exception",
+    [TimeoutError(), AppError("COMPANION_PROVIDER_RATE_LIMITED", "Safe error", 429)],
 )
 async def test_timeouts_and_429_release_turn(exception):
     s, _ = service(exception)
@@ -337,7 +342,9 @@ async def test_companion_internal_api_requires_key_and_rejects_browser_context()
         assert result.status_code == 422 and "private" not in result.text
 
 
-async def test_gemini_chat_uses_existing_sdk_manual_declarations_and_gemini_model(monkeypatch):
+async def test_gemini_chat_uses_existing_sdk_manual_declarations_and_gemini_model(
+    monkeypatch,
+):
     def handler(request):
         body = json.loads(request.content)
         assert "gemini-3.8-flash" in str(request.url)
@@ -394,7 +401,8 @@ async def test_gemini_chat_safe_errors_no_retries(monkeypatch, status, code):
     )
     with pytest.raises(AppError) as error:
         await GeminiLLMProvider(Settings(_env_file=None, gemini_api_key="mock-key")).chat(
-            [types.Content(role="user", parts=[types.Part(text="hello")])], declarations()
+            [types.Content(role="user", parts=[types.Part(text="hello")])],
+            declarations(),
         )
     assert error.value.code == f"COMPANION_PROVIDER_{code}"
     assert "PRIVATE" not in error.value.message and len(calls) == 1
@@ -413,14 +421,87 @@ async def test_cache_only_recommendations_never_contact_providers_on_a_miss():
     async with httpx.AsyncClient(transport=httpx.MockTransport(forbidden)) as client:
         settings = Settings(_env_file=None)
         for service, body in [
-            (HotelRecommendationService(settings, client), hotel_request(cache_only=True)),
-            (FoodRecommendationService(settings, client), food_request(cache_only=True)),
+            (
+                HotelRecommendationService(settings, client),
+                hotel_request(cache_only=True),
+            ),
+            (
+                FoodRecommendationService(settings, client),
+                food_request(cache_only=True),
+            ),
         ]:
             with pytest.raises(AppError) as error:
                 await service.search(body)
             assert error.value.code.endswith("CACHE_MISS")
         with pytest.raises(ValidationError):
             hotel_request(cache_only=True, refresh=True)
+
+
+async def test_companion_uses_configured_fallback_only_when_primary_is_overloaded(monkeypatch):
+    models = []
+
+    def handler(request):
+        models.append(str(request.url).split("/models/")[-1].split(":")[0])
+        if len(models) == 1:
+            return httpx.Response(503, json={"error": {"code": 503, "message": "Overloaded"}})
+        body = json.loads(request.content)
+        assert body["toolConfig"]["functionCallingConfig"]["mode"] == "ANY"
+        return httpx.Response(
+            200,
+            json={
+                "candidates": [
+                    {
+                        "content": {
+                            "role": "model",
+                            "parts": [
+                                {
+                                    "functionCall": {
+                                        "name": "respond",
+                                        "args": {"intent": "greeting"},
+                                    }
+                                }
+                            ],
+                        }
+                    }
+                ]
+            },
+        )
+
+    sdk_transport(monkeypatch, handler)
+    provider = GeminiLLMProvider(Settings(_env_file=None, gemini_api_key="mock-key"))
+    content = await provider.chat(
+        [types.Content(role="user", parts=[types.Part(text="Hello")])], declarations()
+    )
+    assert content.parts[0].function_call.name == "respond"
+    assert models == ["gemini-3.8-flash", "gemini-3.6-flash"]
+    assert provider.model_name == "gemini-3.6-flash"
+
+
+async def test_companion_keeps_the_fallback_model_across_tool_continuations(monkeypatch):
+    models = []
+
+    def handler(request):
+        models.append(str(request.url).split("/models/")[-1].split(":")[0])
+        if len(models) == 1:
+            return httpx.Response(503, json={"error": {"code": 503, "message": "Overloaded"}})
+        call = (
+            {"name": "get_trip_overview", "args": {}, "id": "overview"}
+            if len(models) == 2
+            else {"name": "respond", "args": {"intent": "greeting"}}
+        )
+        return httpx.Response(
+            200,
+            json={
+                "candidates": [{"content": {"role": "model", "parts": [{"functionCall": call}]}}]
+            },
+        )
+
+    sdk_transport(monkeypatch, handler)
+    service = CompanionService(Settings(_env_file=None, gemini_api_key="mock-key"))
+    step = await service.chat(request(message="Hello"))
+    step = await resume(service, step, data={"destination": "Tokyo", "travelers": 2})
+    assert step.response and step.response.model_name == "gemini-3.6-flash"
+    assert models == ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.6-flash"]
 
 
 async def test_expired_turn_cannot_resume_and_five_calls_are_a_hard_limit():

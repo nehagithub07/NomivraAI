@@ -13,10 +13,13 @@ import {
   SurfaceCard,
 } from "@/components/nomvira/surface-card";
 
-import {
-  TripMap,
-  type TripMapPoint,
-} from "./trip-map";
+import dynamic from "next/dynamic";
+import type { TripMapPoint } from "./trip-map";
+
+const TripMap = dynamic(() => import("./trip-map").then(module => module.TripMap), {
+  ssr: false,
+  loading: () => <div className="h-[520px] animate-pulse rounded-2xl border bg-muted" role="status">Loading map…</div>,
+});
 
 import {
   routeResponseSchema,

@@ -4,10 +4,10 @@ import { foodResponseSchema, foodSearchBodySchema } from "../src/lib/food/valida
 import { defaultFoodFilters, filterAndSortFood, matchesDiets } from "../src/lib/food/catalog.ts";
 import { foodResults } from "./food-fixtures.mjs";
 
-test("food contracts reject fabricated Geoapify ratings, unsafe websites and authoritative browser inputs", () => {
+test("food contracts require sourced ratings of at least four and reject, unsafe websites and authoritative browser inputs", () => {
   const original = foodResults(), candidate = original.candidates[0];
   assert.ok(foodResponseSchema.safeParse(original).success);
-  for (const patch of [{ rating: 4.7 }, { review_count: 30 }, { website: "javascript:alert(1)" }, { website: "https://user:password@example.com" }, { latitude: 91 }]) assert.equal(foodResponseSchema.safeParse({ ...original, candidates: [{ ...candidate, ...patch }] }).success, false);
+  for (const patch of [{ rating: 3.9 }, { rating_source: null }, { rating_scale: 10 }, { website: "javascript:alert(1)" }, { website: "https://user:password@example.com" }, { latitude: 91 }]) assert.equal(foodResponseSchema.safeParse({ ...original, candidates: [{ ...candidate, ...patch }] }).success, false);
   for (const patch of [{ latitude: 1 }, { owner_id: "attacker" }, { budget_total: 1 }, { radius_meters: 100000 }, { limit: 500 }, { categories: [] }, { rating_sort: true }]) assert.equal(foodSearchBodySchema.safeParse(patch).success, false);
   assert.ok(foodSearchBodySchema.safeParse({ categories: ["cafe", "bar"], dietary_preferences: ["vegan"] }).success);
 });

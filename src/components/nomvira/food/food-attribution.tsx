@@ -1,3 +1,4 @@
-export function FoodAttribution({ demo = false }: { demo?: boolean }) {
+export function FoodAttribution({ demo = false, provider = "geoapify" }: { demo?: boolean; provider?: string }) {
+  if (provider === "google_maps") return <p className="type-meta text-muted-foreground">Venue listings and ratings from Google Maps via <a className="underline underline-offset-4" href="https://stayapi.com/" target="_blank" rel="noopener noreferrer">StayAPI</a>. Ratings may change.</p>;
   return <p className="type-meta text-muted-foreground">{demo ? "Fictional development places. " : null}<a className="underline underline-offset-4" href="https://www.geoapify.com/" target="_blank" rel="noopener noreferrer">Powered by Geoapify</a>{" · "}<a className="underline underline-offset-4" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors · ODbL</a>{demo ? " (live data source)" : null}</p>;
 }

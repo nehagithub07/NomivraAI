@@ -96,7 +96,11 @@ class WeatherForecast(StrictModel):
     expires_at: datetime | None = None
     cached: bool = False
     availability: Literal[
-        "available", "partially_available", "not_yet_available", "past_trip", "unavailable"
+        "available",
+        "partially_available",
+        "not_yet_available",
+        "past_trip",
+        "unavailable",
     ]
     days: list[DailyWeather] = Field(default_factory=list, max_length=16)
     uncovered_ranges: list[CoverageGap] = Field(default_factory=list)

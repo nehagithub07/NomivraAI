@@ -60,7 +60,9 @@ def evaluate_risk(period: WeatherPeriod) -> WeatherRisk:
         period.precipitation_probability,
         period.wind_speed_kmh,
     )
-    if code in (65, 67, 82) or (rain is not None and rain >= THRESHOLDS["heavy_rain_mm"]):
+    if code in (65, 67, 82) or (
+        rain is not None and rain >= THRESHOLDS["heavy_rain_mm"]
+    ):
         high.append("heavy_precipitation")
     elif (
         code in (53, 55, 61, 63, 80, 81)
@@ -83,13 +85,11 @@ def evaluate_risk(period: WeatherPeriod) -> WeatherRisk:
     ):
         moderate.append("temperature_extreme")
     return WeatherRisk(
-        level="high"
-        if high
-        else "moderate"
-        if moderate
-        else "low"
-        if period.complete
-        else "unknown",
+        level=(
+            "high"
+            if high
+            else "moderate" if moderate else "low" if period.complete else "unknown"
+        ),
         reasons=sorted(set(high + moderate)),
     )
 

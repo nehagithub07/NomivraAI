@@ -3,7 +3,12 @@ from itertools import combinations
 
 from app.core.errors import AppError
 from app.providers.places.overpass import haversine_km
-from app.schemas.itinerary import BudgetSummary, PlanningInput, Proximity, TripPlanningContext
+from app.schemas.itinerary import (
+    BudgetSummary,
+    PlanningInput,
+    Proximity,
+    TripPlanningContext,
+)
 from app.services.itinerary_validation_service import CATEGORY_INTERESTS
 
 DAILY_CAPACITY = {"relaxed": 2, "balanced": 3, "packed": 4}
@@ -21,13 +26,17 @@ def build_planning_context(
         raise AppError("ITINERARY_INVALID_TRIP", "AI planning supports trips of 1–14 days.", 422)
     if not source.attractions:
         raise AppError(
-            "ITINERARY_MISSING_PLACES", "Discover places before generating your itinerary.", 409
+            "ITINERARY_MISSING_PLACES",
+            "Discover places before generating your itinerary.",
+            409,
         )
     if len({item.candidate_id for item in source.attractions}) != len(source.attractions):
         raise AppError("ITINERARY_INVALID_CONTEXT", "Refresh your saved places and try again.", 422)
     if len({item.candidate_id for item in source.food}) != len(source.food):
         raise AppError(
-            "ITINERARY_INVALID_CONTEXT", "Refresh your saved food spots and try again.", 422
+            "ITINERARY_INVALID_CONTEXT",
+            "Refresh your saved food spots and try again.",
+            422,
         )
     food = [
         item
@@ -44,6 +53,7 @@ def build_planning_context(
             attractions,
             key=lambda item: (
                 -len(CATEGORY_INTERESTS[item.category] & interests),
+                -int(item.notable),
                 item.distance_km,
                 item.candidate_id,
             ),
@@ -106,7 +116,9 @@ def build_planning_context(
         currency=source.currency,
         trip_budget=f"{source.budget_total:.2f}",
         known_accommodation_total=f"{known:.2f}" if known is not None else None,
-        remaining_known_budget=f"{source.budget_total - known:.2f}" if known is not None else None,
+        remaining_known_budget=(
+            f"{source.budget_total - known:.2f}" if known is not None else None
+        ),
     )
     pairs = sorted(
         (

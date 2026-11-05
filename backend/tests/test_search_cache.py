@@ -37,17 +37,25 @@ async def test_search_route_reuses_public_results_but_validates_authentication_e
             200,
             json={
                 "results": [
-                    {"id": 1850147, "name": "Tokyo", "latitude": 35.6895, "longitude": 139.6917}
+                    {
+                        "id": 1850147,
+                        "name": "Tokyo",
+                        "latitude": 35.6895,
+                        "longitude": 139.6917,
+                    }
                 ]
             },
         )
 
     app = create_app(
-        Settings(_env_file=None, nomvira_internal_api_key=KEY), httpx.MockTransport(handler)
+        Settings(_env_file=None, nomvira_internal_api_key=KEY),
+        httpx.MockTransport(handler),
     )
     async with (
         app.router.lifespan_context(app),
-        httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
+        httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as api,
     ):
         for query in ["Tokyo", "tokyo", "Tokyo"]:
             result = await api.get(

@@ -9,7 +9,6 @@ from app.schemas.routing import (
     RouteResult,
 )
 
-
 WALKING_LONG_TRANSFER = 45 * 60
 DRIVING_LONG_TRANSFER = 60 * 60
 
@@ -79,9 +78,7 @@ class RoutingService:
         )
 
         if cached:
-            return cached.model_copy(
-                update={"cached": True}
-            )
+            return cached.model_copy(update={"cached": True})
 
         result = await self.provider.route(request)
 
@@ -95,9 +92,7 @@ class RoutingService:
             segment.model_copy(
                 update={
                     "warning": (
-                        "long_transfer"
-                        if segment.duration_seconds > limit
-                        else None
+                        "long_transfer" if segment.duration_seconds > limit else None
                     )
                 }
             )
@@ -131,9 +126,7 @@ class RoutingService:
         )
 
         if cached:
-            return cached.model_copy(
-                update={"cached": True}
-            )
+            return cached.model_copy(update={"cached": True})
 
         result = await self.provider.matrix(request)
 

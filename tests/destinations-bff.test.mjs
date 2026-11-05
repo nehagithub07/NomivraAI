@@ -90,7 +90,7 @@ test("discovery uses owned trip coordinates, persists signed results and reuses 
     const proof = JSON.parse(args.p_payload); assert.equal(proof.user_id, userId); assert.equal(proof.trip_id, tripId); assert.equal(proof.kind, "discovery"); assert.deepEqual(proof.places, [place]);
     return { data: 1, error: null };
   } };
-  t.mock.method(globalThis, "fetch", async (_url, options) => { calls++; assert.deepEqual(JSON.parse(options.body), { latitude: destination.latitude, longitude: destination.longitude }); return Response.json({ latitude: destination.latitude, longitude: destination.longitude, radius_meters: 10000, places: [place] }); });
+  t.mock.method(globalThis, "fetch", async (_url, options) => { calls++; assert.deepEqual(JSON.parse(options.body), { latitude: destination.latitude, longitude: destination.longitude, radius_meters: 30000, limit: 30 }); return Response.json({ latitude: destination.latitude, longitude: destination.longitude, radius_meters: 30000, places: [place] }); });
   const { POST } = load("src/app/api/trips/[tripId]/discover-places/route.ts", { db });
   const invoke = (body = {}) => POST(post(body), { params: Promise.resolve({ tripId }) });
   assert.deepEqual(await (await invoke()).json(), { places: [place] });
@@ -171,7 +171,7 @@ test("discovery preserves safe connection failure codes without forwarding priva
   const logs = [];
   t.mock.method(console, "warn", (...args) => logs.push(args));
   const { POST } = load("src/app/api/trips/[tripId]/discover-places/route.ts", { db });
-  for (const expected of ["PLACES_PROVIDER_CONNECT_TIMEOUT", "PLACES_PROVIDER_CONNECTION_ERROR", "PLACES_PROVIDER_UNAVAILABLE", "PRIVATE_CODE"]) {
+  for (const expected of ["PLACES_PROVIDER_CONNECT_TIMEOUT", "PLACES_PROVIDER_CONNECTION_ERROR", "PLACES_PROVIDER_TIMEOUT", "PLACES_PROVIDER_READ_TIMEOUT", "PLACES_PROVIDER_WRITE_TIMEOUT", "PLACES_PROVIDER_POOL_TIMEOUT", "PLACES_PROVIDER_UNAVAILABLE", "PRIVATE_CODE"]) {
     code = expected; const before = calls;
     const response = await POST(post(), { params: Promise.resolve({ tripId }) });
     assert.equal(response.status, 503);
@@ -181,7 +181,7 @@ test("discovery preserves safe connection failure codes without forwarding priva
     assert.equal(calls, before + 1);
   }
   const failures = logs.filter(([event]) => event === "[places] discovery_backend_failed");
-  assert.equal(failures.length, 4);
+  assert.equal(failures.length, 8);
   assert.deepEqual(JSON.parse(failures[0][1]), { code: "PLACES_PROVIDER_CONNECT_TIMEOUT", status: 503 });
   assert.ok(!JSON.stringify(logs).includes("PRIVATE"));
 });

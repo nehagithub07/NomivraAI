@@ -23,6 +23,7 @@ from app.providers.routing.openrouteservice import (
 
 from app.services.routing_service import RoutingService
 
+
 def create_app(
     settings: Settings | None = None, transport: httpx.AsyncBaseTransport | None = None
 ) -> FastAPI:
@@ -39,14 +40,18 @@ def create_app(
             follow_redirects=False,
         ) as client:
             app.state.http = client
-            app.state.accommodations = HotelRecommendationService(app.state.settings, client)
+            app.state.accommodations = HotelRecommendationService(
+                app.state.settings, client
+            )
             app.state.food = FoodRecommendationService(app.state.settings, client)
             app.state.itineraries = ItineraryGenerationService(app.state.settings)
             app.state.companion = CompanionService(
                 app.state.settings, app.state.itineraries.provider
             )
             app.state.weather = WeatherService(
-                OpenMeteoWeatherProvider(client, str(app.state.settings.open_meteo_forecast_url))
+                OpenMeteoWeatherProvider(
+                    client, str(app.state.settings.open_meteo_forecast_url)
+                )
             )
             app.state.weather_adaptation = WeatherAdaptationService(
                 app.state.weather, app.state.itineraries
@@ -56,12 +61,8 @@ def create_app(
                     app.state.settings,
                     client,
                 ),
-                ttl_seconds=(
-                    app.state.settings.routing_cache_ttl_seconds
-                ),
-                max_entries=(
-                    app.state.settings.routing_cache_max_entries
-                ),
+                ttl_seconds=(app.state.settings.routing_cache_ttl_seconds),
+                max_entries=(app.state.settings.routing_cache_max_entries),
             )
             yield
 

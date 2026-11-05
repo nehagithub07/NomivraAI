@@ -39,11 +39,15 @@ def normalize_location(item: dict[str, Any]) -> DestinationCandidate:
 
 class OpenMeteoGeocodingProvider(GeocodingProvider):
     def __init__(self, client: httpx.AsyncClient, settings: Settings):
-        self.client, self.base = client, str(settings.open_meteo_geocoding_url).rstrip("/")
+        self.client, self.base = client, str(settings.open_meteo_geocoding_url).rstrip(
+            "/"
+        )
 
     async def search(
         self, query: str, limit: int, language: str, country_code: str | None = None
     ) -> list[DestinationCandidate]:
+        aliases = {"hyd": "Hyderabad", "blr": "Bengaluru", "bom": "Mumbai", "del": "Delhi"}
+        query = aliases.get(query.strip().casefold(), query)
         params: dict[str, str | int] = {
             "name": query,
             "count": limit,
@@ -53,7 +57,11 @@ class OpenMeteoGeocodingProvider(GeocodingProvider):
         if country_code:
             params["countryCode"] = country_code
         data = await request_json(
-            self.client, "GET", f"{self.base}/search", provider="GEOCODING", params=params
+            self.client,
+            "GET",
+            f"{self.base}/search",
+            provider="GEOCODING",
+            params=params,
         )
         try:
             results = data.get("results", [])
@@ -70,7 +78,9 @@ class OpenMeteoGeocodingProvider(GeocodingProvider):
                 "Destination search is temporarily unavailable.",
             ) from None
 
-    async def resolve(self, provider_id: str, language: str = "en") -> DestinationCandidate:
+    async def resolve(
+        self, provider_id: str, language: str = "en"
+    ) -> DestinationCandidate:
         data = await request_json(
             self.client,
             "GET",
@@ -85,5 +95,6 @@ class OpenMeteoGeocodingProvider(GeocodingProvider):
             return candidate
         except (KeyError, TypeError, AttributeError, ValueError, ValidationError):
             raise AppError(
-                "GEOCODING_PROVIDER_INVALID_RESPONSE", "We couldn't confirm this destination."
+                "GEOCODING_PROVIDER_INVALID_RESPONSE",
+                "We couldn't confirm this destination.",
             ) from None

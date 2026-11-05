@@ -1,5 +1,9 @@
 # Discover Places diagnosis and fix
 
+**Update (5 November 2026):** City sightseeing now uses Geoapify first when configured, includes theme parks, and ranks the full bounded pool before returning results. See [the travel feature fixes and database update](travel-features.md) for the current behavior and validation. The notes below describe earlier diagnostics.
+
+**Update (30 October 2026):** When every configured Overpass endpoint fails, the backend now falls back to Geoapify Places if `GEOAPIFY_API_KEY` is configured. A live local FastAPI request verified an Overpass timeout followed by six normalized Geoapify results and HTTP 200. The earlier validation below records the state before this fallback; a hosted browser-to-Supabase round trip still needs separate verification.
+
 The local locking, duplicate-request handling and error attribution have been fixed and validated. **A live success through Overpass and hosted Supabase is not claimed:** the configured public Overpass endpoint timed out during explicit live verification. The fresh backend acquired immediately, made one upstream call, returned a safe provider error and released its slot. Authentication code, RLS, the signed persistence RPC and the existing UI design were preserved.
 
 ## Credentials moved to private environment files
@@ -78,6 +82,8 @@ After the fix:
 | Local queue capacity or wait deadline | `PLACES_RATE_LIMITED` | `discovery_local_rate_limited reason=queue_full` or `wait_timeout` |
 | Overpass HTTP 429 | `PLACES_PROVIDER_RATE_LIMITED` | `places_provider_rate_limited status=429` |
 | Overpass timeout/connection failure | `PLACES_PROVIDER_UNAVAILABLE` → safe BFF `provider_unavailable` | `places_provider_timeout` or transport failure |
+| All Overpass endpoints fail and Geoapify succeeds | HTTP 200 | `geoapify_places_fallback_completed normalized_places=...` |
+| Geoapify fallback also fails | `PLACES_PROVIDER_UNAVAILABLE` → safe BFF `provider_unavailable` | `geoapify_places_fallback_failed code=...` |
 
 The latest explicit live requests did **not** return local 429. A fresh backend logged `discovery_slot_acquired wait_ms=0`, one `overpass_calling`, `places_provider_timeout`, `PLACES_PROVIDER_UNAVAILABLE` and `discovery_slot_released`, returning HTTP 503 after about **42 seconds**. The configured `overpass.private.coffee` status endpoint also timed out from this environment. A status-only check of `overpass-api.de` returned 406; no automatic switch was made. These observations establish upstream/network unavailability during testing, not permanent provider downtime.
 
@@ -111,7 +117,7 @@ No mypy or pyright configuration/check command is present. Ruff and the configur
 
 ## 9. Remaining limitations
 
-Public Overpass availability remains external to the application. It timed out during this session, so a fresh live provider result and an authenticated browser → hosted Supabase discovery/save round trip could not be established. Mocked success paths, real local PostgreSQL proof/RLS behavior and browser rendering were verified independently. No places were fabricated, demo fallback enabled or hosted user data written for verification. Restart the existing services to ensure they load the changed code and environment; an older process may retain prior state/settings. The previous internal key remains intentionally unchanged until a coordinated rotation.
+Public Overpass availability remains external to the application. The local Geoapify fallback was verified, but a hosted browser → Supabase discovery/save round trip was not. No places were fabricated, demo fallback enabled or hosted user data written for verification. Restart existing services to load the changed code; an older process may retain prior state. The previous internal key remains intentionally unchanged until a coordinated rotation.
 
 ## 10. Manual verification
 
@@ -119,9 +125,9 @@ Public Overpass availability remains external to the application. It timed out d
 2. Restart Next.js with `npm.cmd run dev`. The private root internal key and backend internal key must match the restricted database application secret.
 3. Sign in normally, open an owned trip with confirmed coordinates and choose Overview. If persisted places already exist, they should display without Overpass calls.
 4. For a trip without persisted places, open the browser Network panel and click **Discover places once**. Confirm one `POST /api/trips/<tripId>/discover-places`; while pending, its button must be disabled.
-5. With a responsive provider, expect `discovery_slot_acquired`, `overpass_completed normalized_places=...`, `discovery_slot_released`, BFF `discovery_persisted`, HTTP 200 and visible cards. Reload to verify persistence with no new Overpass request.
+5. With a responsive provider, expect either `overpass_completed normalized_places=...` or, after all Overpass endpoints fail, `geoapify_places_fallback_completed normalized_places=...`; then expect `discovery_slot_released`, BFF `discovery_persisted`, HTTP 200 and visible cards. Reload to verify persistence without another discovery request.
 6. If HTTP 429 occurs, inspect its safe JSON code: `PLACES_RATE_LIMITED` means bounded local saturation; `PLACES_PROVIDER_RATE_LIMITED` means actual upstream throttling. Do not immediately repeat clicks.
-7. If the current endpoint still times out, expect safe provider-unavailable handling and slot release. Check provider/network availability and, if choosing another approved instance, change only backend `OVERPASS_API_URL` and restart FastAPI. No automatic instance rotation occurs.
+7. If every Overpass endpoint times out, the configured Geoapify key is used as fallback. If that also fails, inspect the safe `geoapify_places_fallback_failed` log code and check network access and provider quota/configuration.
 
 ## 11. Recommended commit message
 

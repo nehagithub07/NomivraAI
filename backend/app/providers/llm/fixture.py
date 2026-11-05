@@ -15,18 +15,17 @@ class FixtureLLMProvider(LLMProvider):
     ) -> GeneratedItinerary:
         if hasattr(context, "original"):
             return context.original.model_copy(deep=True)
-        pool = iter(
-            sorted(
-                context.attractions,
-                key=lambda item: (item.latitude, item.longitude, item.candidate_id),
-            )
+        attractions = sorted(
+            context.attractions,
+            key=lambda item: (item.latitude, item.longitude, item.candidate_id),
         )
         days = []
         for i, day in enumerate(context.dates):
             items = []
             for slot in range(context.max_attractions_per_day):
-                candidate = next(pool, None)
-                if candidate:
+                candidate_index = slot * len(context.dates) + i
+                if candidate_index < len(attractions):
+                    candidate = attractions[candidate_index]
                     items.append(
                         ItineraryItem(
                             candidate_type="attraction",
@@ -53,5 +52,7 @@ class FixtureLLMProvider(LLMProvider):
                         reason_code="free_time",
                     )
                 )
-            days.append(ItineraryDay(date=day, day_number=i + 1, theme="mixed", items=items))
+            days.append(
+                ItineraryDay(date=day, day_number=i + 1, theme="mixed", items=items)
+            )
         return GeneratedItinerary(days=days, warnings=[])

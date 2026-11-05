@@ -6,7 +6,7 @@ function transactionBody(sql) {
   return sql.replace(/^\s*begin;\s*/i, "").replace(/\s*commit;\s*$/i, "");
 }
 
-export function buildTripDatabaseSetup(foundation, openProviders, internalKey, accommodations = "", food = "", itinerary = "", budget = "", weather = "", companion = "") {
+export function buildTripDatabaseSetup(foundation, openProviders, internalKey, accommodations = "", food = "", itinerary = "", budget = "", weather = "", companion = "", travelFixes = "") {
   if (typeof internalKey !== "string" || internalKey.length < 32) throw new Error("Configure NOMVIRA_INTERNAL_API_KEY in .env.local first.");
   if (foundation.includes("$nomvira_foundation$") || openProviders.includes("$nomvira_open_providers$") || accommodations.includes("$nomvira_accommodations$") || food.includes("$nomvira_food$") || itinerary.includes("$nomvira_itinerary$") || budget.includes("$nomvira_budget$")) throw new Error("Unexpected migration delimiter.");
   const secret = internalKey.replaceAll("'", "''");
@@ -70,6 +70,7 @@ insert into nomvira_private.application_secrets(name,value)
 values ('internal_api_key','${secret}')
 on conflict(name) do update set value=excluded.value;
 notify pgrst,'reload schema';
+${travelFixes ? transactionBody(travelFixes) : ""}
 commit;
 `;
 }
@@ -79,7 +80,7 @@ export async function prepareTripDatabase(root = process.cwd()) {
   const match = envText.match(/^\s*NOMVIRA_INTERNAL_API_KEY\s*=\s*(?:"([^"\r\n]*)"|'([^'\r\n]*)'|([^#\r\n]*))/m);
   const internalKey = match && (match[1] ?? match[2] ?? match[3]).trim();
   const directory = path.join(root, "supabase", "migrations");
-  const [foundation, openProviders, accommodations, food, itinerary, budget, weather, companion] = await Promise.all([
+  const [foundation, openProviders, accommodations, food, itinerary, budget, weather, companion, placeRefresh, ratedFood] = await Promise.all([
     readFile(path.join(directory, "20261028000200_destination_intelligence.sql"), "utf8"),
     readFile(path.join(directory, "20261028000300_open_destination_providers.sql"), "utf8"),
     readFile(path.join(directory, "20261028000400_accommodation_selections.sql"), "utf8"),
@@ -88,10 +89,13 @@ export async function prepareTripDatabase(root = process.cwd()) {
     readFile(path.join(directory, "20261029000700_trip_budget_entries.sql"), "utf8"),
     readFile(path.join(directory, "20261030000800_weather_adaptation.sql"), "utf8"),
     readFile(path.join(directory, "20261030000900_ai_companion.sql"), "utf8"),
+    readFile(path.join(directory, "20261030001000_place_refresh_and_map_backfill.sql"), "utf8"),
+    readFile(path.join(directory, "20261105001100_rated_food_provider.sql"), "utf8"),
   ]);
   const output = path.join(root, ".qa", "setup-trip-database.sql");
   await mkdir(path.dirname(output), { recursive: true });
-  await writeFile(output, buildTripDatabaseSetup(foundation, openProviders, internalKey, accommodations, food, itinerary, budget, weather, companion), { mode: 0o600 });
+  const travelFixes = transactionBody(placeRefresh) + "\n" + transactionBody(ratedFood);
+  await writeFile(output, buildTripDatabaseSetup(foundation, openProviders, internalKey, accommodations, food, itinerary, budget, weather, companion, travelFixes), { mode: 0o600 });
   return output;
 }
 

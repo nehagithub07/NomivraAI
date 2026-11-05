@@ -40,6 +40,7 @@ class Turn:
     repairs: int = 0
     model_seconds: float = 0
     busy: bool = False
+    model_name: str | None = None
 
 
 class CompanionService:
@@ -54,7 +55,9 @@ class CompanionService:
         ids = set(references or [])
         if ids - {r.call_id for r in good}:
             raise AppError(
-                "COMPANION_INVALID_ARGUMENTS", "Reload the companion and try again.", 422
+                "COMPANION_INVALID_ARGUMENTS",
+                "Reload the companion and try again.",
+                422,
             )
         pending = next(
             (
@@ -68,7 +71,12 @@ class CompanionService:
         )
         if pending:
             intent, message = "proposal", REPLIES["proposal"]
-        elif not good and intent not in ("greeting", "clarify", "unsupported", "unavailable"):
+        elif not good and intent not in (
+            "greeting",
+            "clarify",
+            "unsupported",
+            "unavailable",
+        ):
             intent, message = "unavailable", REPLIES["unavailable"]
         elif not good:
             message = REPLIES[intent]
@@ -80,21 +88,24 @@ class CompanionService:
                     for r in good
                     if not ids or r.call_id in ids
                 ][-5:],
-                suggested_actions=["Adapt itinerary for weather"]
-                if any(r.name == "get_weather" and r.data.get("conflicts") for r in good)
-                else [],
+                suggested_actions=(
+                    ["Adapt itinerary for weather"]
+                    if any(r.name == "get_weather" and r.data.get("conflicts") for r in good)
+                    else []
+                ),
                 pending_call=pending,
                 tool_audit=[
                     {
                         "tool_name": c.name,
                         "status": next(
-                            (r.status for r in turn.results if r.call_id == c.id), "rejected"
+                            (r.status for r in turn.results if r.call_id == c.id),
+                            "rejected",
                         ),
                     }
                     for c in turn.calls
                 ],
                 prompt_version=COMPANION_PROMPT_VERSION,
-                model_name=self.settings.gemini_model,
+                model_name=turn.model_name or self.settings.gemini_model,
                 demo=False,
                 reference_date=turn.request.context.reference_date,
             )
@@ -113,15 +124,21 @@ class CompanionService:
                 request.trip_id,
             ):
                 raise AppError(
-                    "COMPANION_EXPIRED", "Your chat request expired. Please send it again.", 409
+                    "COMPANION_EXPIRED",
+                    "Your chat request expired. Please send it again.",
+                    409,
                 )
             if turn.busy or request.context or request.message or request.history:
                 raise AppError(
-                    "COMPANION_INVALID_ARGUMENTS", "This chat request cannot continue.", 422
+                    "COMPANION_INVALID_ARGUMENTS",
+                    "This chat request cannot continue.",
+                    422,
                 )
             if [r.call_id for r in request.results] != [c.id for c in turn.waiting]:
                 raise AppError(
-                    "COMPANION_INVALID_RESULT", "Tool results could not be verified.", 422
+                    "COMPANION_INVALID_RESULT",
+                    "Tool results could not be verified.",
+                    422,
                 )
             for result, call in zip(request.results, turn.waiting, strict=True):
                 checked_result(result, call)
@@ -147,9 +164,14 @@ class CompanionService:
                 raise AppError("COMPANION_INVALID_CONTEXT", "Reload your saved trip.", 422)
             if self.settings.llm_provider == "fixture":
                 raise AppError(
-                    "COMPANION_CONFIGURATION_ERROR", "Trip chat requires Gemini configuration.", 503
+                    "COMPANION_CONFIGURATION_ERROR",
+                    "Trip chat requires Gemini configuration.",
+                    503,
                 )
-            user_key, trip_key = str(request.user_id), f"{request.user_id}:{request.trip_id}"
+            user_key, trip_key = (
+                str(request.user_id),
+                f"{request.user_id}:{request.trip_id}",
+            )
             if any(now - self.events.get(k, -100) < 3 for k in (user_key, trip_key)):
                 raise AppError(
                     "COMPANION_RATE_LIMITED",
@@ -186,7 +208,7 @@ class CompanionService:
                 for m in request.history
             ]
             contents.append(types.Content(role="user", parts=[types.Part(text=request.message)]))
-            turn = Turn(request, contents, now + 85)
+            turn = Turn(request, contents, now + 110)
             token = secrets.token_urlsafe(32)
             self.turns[token] = turn
             if unsupported_transaction(request.message):
@@ -196,12 +218,18 @@ class CompanionService:
         try:
             while True:
                 started = time.monotonic()
-                remaining = min(turn.deadline - started, 50 - turn.model_seconds)
+                remaining = min(turn.deadline - started, 70 - turn.model_seconds)
                 if remaining <= 0:
                     raise TimeoutError
                 allowed = declarations() if len(turn.calls) < 5 else [declarations()[-1]]
                 async with asyncio.timeout(remaining):
-                    content = await self.provider.chat(turn.contents, allowed)
+                    if isinstance(self.provider, GeminiLLMProvider):
+                        content = await self.provider.chat(
+                            turn.contents, allowed, preferred_model=turn.model_name
+                        )
+                        turn.model_name = self.provider.model_name
+                    else:
+                        content = await self.provider.chat(turn.contents, allowed)
                 turn.model_seconds += time.monotonic() - started
                 # Preserve opaque function-call signatures for Gemini within this turn only.
                 # No raw content, thought text or signature is persisted or sent to the browser.
@@ -211,7 +239,10 @@ class CompanionService:
                     if len(functions) == 1 and functions[0].name == "respond":
                         answer = RespondInput.model_validate(functions[0].args or {})
                         response = self.finish(
-                            turn, answer.intent, answer.message, answer.reference_call_ids
+                            turn,
+                            answer.intent,
+                            answer.message,
+                            answer.reference_call_ids,
                         )
                         del self.turns[token]
                         return response
@@ -219,7 +250,9 @@ class CompanionService:
                         raise ValueError
                     if len(turn.calls) + len(functions) > 5:
                         raise AppError(
-                            "COMPANION_TOOL_LIMIT", "Ask one smaller trip question at a time.", 422
+                            "COMPANION_TOOL_LIMIT",
+                            "Ask one smaller trip question at a time.",
+                            422,
                         )
                     calls = []
                     for function in functions:
@@ -239,7 +272,9 @@ class CompanionService:
                         write = tool.permission == ToolPermission.WRITE_CONFIRMATION_REQUIRED
                         if turn.writes + int(write) > 1:
                             raise AppError(
-                                "COMPANION_TOOL_LIMIT", "Propose one change at a time.", 422
+                                "COMPANION_TOOL_LIMIT",
+                                "Propose one change at a time.",
+                                422,
                             )
                         turn.writes += int(write)
                         calls.append(
@@ -289,7 +324,9 @@ class CompanionService:
         except TimeoutError:
             self.turns.pop(token, None)
             raise AppError(
-                "COMPANION_PROVIDER_TIMEOUT", "Your companion took too long. Please try again.", 503
+                "COMPANION_PROVIDER_TIMEOUT",
+                "Your companion took too long. Please try again.",
+                503,
             ) from None
         except Exception:
             self.turns.pop(token, None)

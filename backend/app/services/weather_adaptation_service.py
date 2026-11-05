@@ -11,7 +11,11 @@ from app.schemas.weather import (
 )
 from app.services.itinerary_context_service import build_planning_context
 from app.services.itinerary_validation_service import resolve_itinerary, semantic_errors
-from app.services.weather_risk_service import SUITABILITY, classify_setting, detect_conflicts
+from app.services.weather_risk_service import (
+    SUITABILITY,
+    classify_setting,
+    detect_conflicts,
+)
 
 
 def scheduled_items(plan, context):
@@ -23,12 +27,16 @@ def scheduled_items(plan, context):
             itinerary_item_id=f"{day.date}:{index}",
             candidate_id=item.candidate_id,
             candidate_type=item.candidate_type,
-            title=attractions[item.candidate_id].name
-            if item.candidate_id in attractions
-            else "Saved activity",
-            category=attractions[item.candidate_id].category
-            if item.candidate_id in attractions
-            else None,
+            title=(
+                attractions[item.candidate_id].name
+                if item.candidate_id in attractions
+                else "Saved activity"
+            ),
+            category=(
+                attractions[item.candidate_id].category
+                if item.candidate_id in attractions
+                else None
+            ),
         )
         for day in plan.days
         for index, item in enumerate(day.items)
@@ -46,12 +54,18 @@ def placements(plan):
 def adaptation_errors(plan: GeneratedItinerary, context: WeatherPlanningContext):
     errors = semantic_errors(plan, context)
     before, after = placements(context.original), placements(plan)
-    movable = {(c.date, c.period, "attraction", c.candidate_id) for c in context.conflicts}
+    movable = {
+        (c.date, c.period, "attraction", c.candidate_id) for c in context.conflicts
+    }
     for place, count in before.items():
         if place not in movable and after[place] < count:
             errors.append("preserve_unaffected_activities_and_food_hotel_choices")
     settings = context.candidate_settings
-    slots = {(day.date, p.period): p for day in context.verified_weather.days for p in day.periods}
+    slots = {
+        (day.date, p.period): p
+        for day in context.verified_weather.days
+        for p in day.periods
+    }
     additions = list((after - before).elements())
     removals = list((before - after).elements())
     if len(additions) > len(removals):
@@ -59,7 +73,9 @@ def adaptation_errors(plan: GeneratedItinerary, context: WeatherPlanningContext)
     original_themes = {day.date: day.theme for day in context.original.days}
     affected_dates = {c.date for c in context.conflicts}
     for day in plan.days:
-        if day.date not in affected_dates and day.theme != original_themes.get(day.date):
+        if day.date not in affected_dates and day.theme != original_themes.get(
+            day.date
+        ):
             errors.append("preserve_unaffected_day_themes")
     for date, period, kind, identity in removals:
         if (date, period, kind, identity) not in movable:
@@ -68,14 +84,20 @@ def adaptation_errors(plan: GeneratedItinerary, context: WeatherPlanningContext)
         replacements = [
             a
             for a in additions
-            if a[:2] == (date, period) and a[2] == "attraction" and settings.get(a[3]) == "indoor"
+            if a[:2] == (date, period)
+            and a[2] == "attraction"
+            and settings.get(a[3]) == "indoor"
         ]
         if not moved and not replacements:
-            errors.append("keep_conflicted_activity_or_replace_with_supplied_indoor_candidate")
+            errors.append(
+                "keep_conflicted_activity_or_replace_with_supplied_indoor_candidate"
+            )
         for target in moved:
             source_slot, target_slot = slots.get((date, period)), slots.get(target[:2])
             setting = settings.get(identity, "unknown")
-            old_score = SUITABILITY[setting][source_slot.risk.level] if source_slot else None
+            old_score = (
+                SUITABILITY[setting][source_slot.risk.level] if source_slot else None
+            )
             new_score = (
                 SUITABILITY[setting][target_slot.risk.level]
                 if target_slot and target_slot.complete
@@ -123,18 +145,24 @@ class WeatherAdaptationService:
             or source.end_date != context.end_date
             or source.timezone != context.timezone
         ):
-            raise AppError("WEATHER_CONTEXT_CHANGED", "Refresh your trip before adapting.", 409)
+            raise AppError(
+                "WEATHER_CONTEXT_CHANGED", "Refresh your trip before adapting.", 409
+            )
         # Never accept a client weather snapshot. Reuse only the backend's unexpired provider cache.
         forecast = await self.weather.forecast(
             source.model_copy(update={"cache_only": False, "refresh": False})
         )
-        conflicts = detect_conflicts(forecast, scheduled_items(request.original, context))
+        conflicts = detect_conflicts(
+            forecast, scheduled_items(request.original, context)
+        )
         if not forecast.days or not conflicts:
             response = ItineraryGenerationResponse(
                 provider=self.itineraries.settings.llm_provider,
-                model_name="deterministic-fixture-v1"
-                if self.itineraries.settings.llm_provider == "fixture"
-                else self.itineraries.settings.gemini_itinerary_model,
+                model_name=(
+                    "deterministic-fixture-v1"
+                    if self.itineraries.settings.llm_provider == "fixture"
+                    else self.itineraries.settings.gemini_itinerary_model
+                ),
                 prompt_version=WEATHER_ADAPTATION_PROMPT_VERSION,
                 demo=self.itineraries.settings.llm_provider == "fixture",
                 itinerary=resolve_itinerary(request.original, context),
@@ -155,7 +183,8 @@ class WeatherAdaptationService:
             verified_weather=forecast,
             conflicts=conflicts,
             candidate_settings={
-                c.candidate_id: classify_setting(c.category) for c in context.attractions
+                c.candidate_id: classify_setting(c.category)
+                for c in context.attractions
             },
             slot_scores=[
                 {
@@ -163,7 +192,8 @@ class WeatherAdaptationService:
                     "period": p.period,
                     "risk": p.risk.level,
                     "scores": {
-                        setting: scores[p.risk.level] for setting, scores in SUITABILITY.items()
+                        setting: scores[p.risk.level]
+                        for setting, scores in SUITABILITY.items()
                     },
                 }
                 for d in forecast.days
@@ -193,11 +223,15 @@ class WeatherAdaptationService:
                             reason_code=(
                                 "pace_balance"
                                 if i.candidate_type == "attraction"
-                                else "food_option"
-                                if i.candidate_type == "food"
-                                else "selected_stay"
-                                if i.candidate_type == "hotel"
-                                else "free_time"
+                                else (
+                                    "food_option"
+                                    if i.candidate_type == "food"
+                                    else (
+                                        "selected_stay"
+                                        if i.candidate_type == "hotel"
+                                        else "free_time"
+                                    )
+                                )
                             ),
                         )
                         for i in day.items
@@ -224,7 +258,9 @@ class WeatherAdaptationService:
             parent_version_id=request.parent_version_id,
             weather_fetched_at=forecast.fetched_at,
             remaining_conflicts=remaining,
-            explanation="Created a minimally adjusted plan using verified forecasts."
-            if changed
-            else "No suitable improvement was found. Your saved itinerary is unchanged.",
+            explanation=(
+                "Created a minimally adjusted plan using verified forecasts."
+                if changed
+                else "No suitable improvement was found. Your saved itinerary is unchanged."
+            ),
         )

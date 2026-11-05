@@ -24,11 +24,15 @@ async def search(
         OpenMeteoGeocodingProvider(request.app.state.http, request.app.state.settings)
     )
     key = (query.q.casefold(), query.language, query.limit, query.country_code)
-    return await request.app.state.search_cache.get_or_load(key, lambda: service.search(query))
+    return await request.app.state.search_cache.get_or_load(
+        key, lambda: service.search(query)
+    )
 
 
 @router.get("/{provider_location_id}")
-async def resolve(request: Request, provider_location_id: LocationID) -> DestinationCandidate:
+async def resolve(
+    request: Request, provider_location_id: LocationID
+) -> DestinationCandidate:
     request.app.state.limits.search()
     return await OpenMeteoGeocodingProvider(
         request.app.state.http, request.app.state.settings

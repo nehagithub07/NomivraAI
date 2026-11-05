@@ -52,15 +52,22 @@ def _values(table, key):
     if not isinstance(values, list) or len(values) != len(times):
         raise ValueError("Inconsistent weather series")
     for value in values:
-        if value is not None and (type(value) not in (int, float) or not math.isfinite(value)):
+        if value is not None and (
+            type(value) not in (int, float) or not math.isfinite(value)
+        ):
             raise ValueError("Invalid weather measurement")
     return values
 
 
-def normalize_forecast(data: dict, timezone: str, start: date, end: date) -> list[DailyWeather]:
+def normalize_forecast(
+    data: dict, timezone: str, start: date, end: date
+) -> list[DailyWeather]:
     zone = ZoneInfo(timezone)
     daily, hourly = data["daily"], data["hourly"]
-    for table, variables, bound in [(daily, DAILY_VARIABLES, 16), (hourly, HOURLY_VARIABLES, 400)]:
+    for table, variables, bound in [
+        (daily, DAILY_VARIABLES, 16),
+        (hourly, HOURLY_VARIABLES, 400),
+    ]:
         if not isinstance(table["time"], list) or len(table["time"]) > bound:
             raise ValueError("Unbounded weather series")
         for key in ("time", *variables):
@@ -78,11 +85,11 @@ def normalize_forecast(data: dict, timezone: str, start: date, end: date) -> lis
                 else (
                     "km/h"
                     if "wind_speed" in variable
-                    else "%"
-                    if "probability" in variable
-                    else "mm"
-                    if "precipitation" in variable
-                    else None
+                    else (
+                        "%"
+                        if "probability" in variable
+                        else "mm" if "precipitation" in variable else None
+                    )
                 )
             )
             if expected is not None and units.get(variable) != expected:
@@ -101,7 +108,9 @@ def normalize_forecast(data: dict, timezone: str, start: date, end: date) -> lis
             continue
         # A date with no daily measurements is not genuine forecast coverage.
         if all(
-            daily[key][i] is None for key in DAILY_VARIABLES if key not in ("sunrise", "sunset")
+            daily[key][i] is None
+            for key in DAILY_VARIABLES
+            if key not in ("sunrise", "sunset")
         ):
             continue
         periods = []
@@ -122,15 +131,21 @@ def normalize_forecast(data: dict, timezone: str, start: date, end: date) -> lis
                 temperature_c=_average(collected["temperature_2m"]),
                 apparent_temperature_c=_average(collected["apparent_temperature"]),
                 apparent_temperature_max_c=_maximum(collected["apparent_temperature"]),
-                apparent_temperature_min_c=min(collected["apparent_temperature"])
-                if collected["apparent_temperature"]
-                else None,
-                precipitation_probability=round(_maximum(collected["precipitation_probability"]))
-                if collected["precipitation_probability"]
-                else None,
-                precipitation_mm=round(sum(collected["precipitation"]), 2)
-                if collected["precipitation"]
-                else None,
+                apparent_temperature_min_c=(
+                    min(collected["apparent_temperature"])
+                    if collected["apparent_temperature"]
+                    else None
+                ),
+                precipitation_probability=(
+                    round(_maximum(collected["precipitation_probability"]))
+                    if collected["precipitation_probability"]
+                    else None
+                ),
+                precipitation_mm=(
+                    round(sum(collected["precipitation"]), 2)
+                    if collected["precipitation"]
+                    else None
+                ),
                 wind_speed_kmh=_maximum(collected["wind_speed_10m"]),
                 weather_code=code,
                 condition=label,
@@ -153,13 +168,23 @@ def normalize_forecast(data: dict, timezone: str, start: date, end: date) -> lis
                 temperature_min_c=daily["temperature_2m_min"][i],
                 apparent_temperature_max_c=daily["apparent_temperature_max"][i],
                 apparent_temperature_min_c=daily["apparent_temperature_min"][i],
-                precipitation_probability_max=round(daily["precipitation_probability_max"][i])
-                if daily["precipitation_probability_max"][i] is not None
-                else None,
+                precipitation_probability_max=(
+                    round(daily["precipitation_probability_max"][i])
+                    if daily["precipitation_probability_max"][i] is not None
+                    else None
+                ),
                 precipitation_sum_mm=daily["precipitation_sum"][i],
                 wind_speed_max_kmh=daily["wind_speed_10m_max"][i],
-                sunrise=timestamp(daily["sunrise"][i]) if daily["sunrise"][i] is not None else None,
-                sunset=timestamp(daily["sunset"][i]) if daily["sunset"][i] is not None else None,
+                sunrise=(
+                    timestamp(daily["sunrise"][i])
+                    if daily["sunrise"][i] is not None
+                    else None
+                ),
+                sunset=(
+                    timestamp(daily["sunset"][i])
+                    if daily["sunset"][i] is not None
+                    else None
+                ),
                 periods=periods,
             )
         )
@@ -214,6 +239,13 @@ class OpenMeteoWeatherProvider(WeatherProvider):
             if not isinstance(data, dict) or data.get("error"):
                 raise ValueError
             return normalize_forecast(data, timezone, start_date, end_date)
-        except (KeyError, TypeError, ValueError, OverflowError, OSError, ValidationError):
+        except (
+            KeyError,
+            TypeError,
+            ValueError,
+            OverflowError,
+            OSError,
+            ValidationError,
+        ):
             logger.warning("weather_provider_invalid_response")
             raise AppError("WEATHER_PROVIDER_INVALID_RESPONSE", MESSAGE, 502) from None

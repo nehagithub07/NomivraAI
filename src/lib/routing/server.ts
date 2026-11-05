@@ -20,6 +20,10 @@ import {
 } from "@/lib/destinations/backend";
 
 import {
+  getPersistedPlaces,
+} from "@/lib/destinations/persistence";
+
+import {
   routeResponseSchema,
   type RouteResponse,
   type RoutingMode,
@@ -28,15 +32,25 @@ import {
 
 const allowedCodes = new Set([
   "ROUTING_CONFIGURATION_ERROR",
+
   "ROUTING_PROVIDER_AUTH_ERROR",
+
   "ROUTING_PROVIDER_RATE_LIMITED",
+
+  "ROUTING_PROVIDER_CONNECT_TIMEOUT",
+  "ROUTING_PROVIDER_READ_TIMEOUT",
+  "ROUTING_PROVIDER_WRITE_TIMEOUT",
+  "ROUTING_PROVIDER_POOL_TIMEOUT",
   "ROUTING_PROVIDER_TIMEOUT",
+
   "ROUTING_PROVIDER_UNAVAILABLE",
   "ROUTING_PROVIDER_INVALID_RESPONSE",
   "ROUTING_PROVIDER_INVALID_REQUEST",
+
+  "ROUTING_REQUEST_TOO_LARGE",
+
   "ROUTE_NOT_FOUND",
 ]);
-
 
 export async function getTripDayRoute(
   db: SupabaseClient<Database>,
@@ -69,17 +83,61 @@ export async function getTripDayRoute(
     );
   }
 
-  const points = day.items
-    .filter(
-      (item) =>
-        item.latitude !== null &&
-        item.longitude !== null,
-    )
-    .map((item) => ({
-      latitude: item.latitude!,
-      longitude: item.longitude!,
-      label: item.title,
-    }));
+  const needsPlaceCoordinates = day.items.some(
+    (item) =>
+      (item.latitude === null || item.longitude === null) &&
+      item.candidate_type === "attraction" &&
+      item.candidate_id !== null,
+  );
+
+  const discoveredPlaces = needsPlaceCoordinates
+    ? await getPersistedPlaces(db, trip.id)
+    : [];
+
+  const discoveredPlaceMap = new Map(
+    discoveredPlaces.map(
+      (place) => [
+        place.provider_place_id,
+        place,
+      ],
+    ),
+  );
+
+  const points = day.items.flatMap((item) => {
+    let latitude = item.latitude;
+    let longitude = item.longitude;
+
+    if (
+      (latitude === null || longitude === null) &&
+      item.candidate_type === "attraction" &&
+      item.candidate_id
+    ) {
+      const persisted =
+        discoveredPlaceMap.get(
+          item.candidate_id,
+        );
+
+      if (persisted) {
+        latitude = persisted.latitude;
+        longitude = persisted.longitude;
+      }
+    }
+
+    if (
+      latitude === null ||
+      longitude === null
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        latitude,
+        longitude,
+        label: item.title,
+      },
+    ];
+  });
 
   if (points.length < 2) {
     throw new TravelError(
@@ -100,69 +158,155 @@ export async function getTripDayRoute(
 
   let response: Response;
 
-  try {
-    response = await fetch(
-      `${base.replace(/\/$/, "")}/api/v1/routing/route`,
-      {
-        method: "POST",
+ try {
+  response = await fetch(
+    `${base.replace(/\/$/, "")}/api/v1/routing/route`,
+    {
+      method: "POST",
 
-        headers: {
-          "Content-Type": "application/json",
-          "X-Nomvira-Internal-Key": internalKey(),
-        },
-
-        body: JSON.stringify({
-          points,
-          mode,
-        }),
-
-        cache: "no-store",
-
-        signal: AbortSignal.timeout(
-          25_000,
-        ),
-
-        redirect: "error",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Nomvira-Internal-Key": internalKey(),
       },
+
+      body: JSON.stringify({
+        points,
+        mode,
+      }),
+
+      cache: "no-store",
+
+      signal: AbortSignal.timeout(55_000),
+
+      redirect: "error",
+    },
+  );
+} catch (error) {
+  const isTimeout =
+    error instanceof DOMException &&
+    (
+      error.name === "TimeoutError" ||
+      error.name === "AbortError"
     );
 
-  } catch {
+  if (isTimeout) {
+    console.warn(
+      "[routing] backend_timeout",
+      JSON.stringify({
+        dayNumber,
+        mode,
+      }),
+    );
+
     throw new TravelError(
       "ROUTING_PROVIDER_TIMEOUT",
-      "Route information is temporarily unavailable.",
+      "The routing service took too long to respond.",
+      503,
     );
   }
 
-  if (!response.ok) {
-    const failure = await response
-      .json()
-      .catch(() => null);
+  console.warn(
+    "[routing] backend_connection_failed",
+    JSON.stringify({
+      dayNumber,
+      mode,
+      error:
+        error instanceof Error
+          ? error.message
+          : "unknown",
+    }),
+  );
 
-    const candidate =
-      failure?.error?.code;
+  throw new TravelError(
+    "ROUTING_BACKEND_UNAVAILABLE",
+    "The routing backend could not be reached.",
+    503,
+  );
+}
 
-    const code =
-      typeof candidate === "string" &&
-      allowedCodes.has(candidate)
-        ? candidate
-        : "ROUTING_PROVIDER_UNAVAILABLE";
+//   if (!response.ok) {
+//     const failure = await response
+//       .json()
+//       .catch(() => null);
 
-    throw new TravelError(
+//     const candidate =
+//       failure?.error?.code;
+
+//     const code =
+//       typeof candidate === "string" &&
+//       allowedCodes.has(candidate)
+//         ? candidate
+//         : "ROUTING_PROVIDER_UNAVAILABLE";
+
+//     throw new TravelError(
+//       code,
+//       "Route information is temporarily unavailable.",
+//       response.status === 429
+//         ? 429
+//         : response.status === 404
+//           ? 404
+//           : response.status === 409
+//             ? 409
+//             : 503,
+//     );
+//   }
+
+ if (!response.ok) {
+  const failure = await response
+    .json()
+    .catch(() => null);
+
+  const candidate =
+    failure?.error?.code;
+
+  const code =
+    typeof candidate === "string" &&
+    allowedCodes.has(candidate)
+      ? candidate
+      : "ROUTING_PROVIDER_UNAVAILABLE";
+
+  // This message comes from our own FastAPI backend,
+  // not directly from the external provider.
+  const message =
+    typeof failure?.error?.message === "string"
+      ? failure.error.message
+      : "Route information is temporarily unavailable.";
+
+  const status =
+    [
+      400,
+      404,
+      409,
+      422,
+      429,
+      502,
+      503,
+      504,
+    ].includes(response.status)
+      ? response.status
+      : 503;
+
+  console.warn(
+    "[routing] backend_failed",
+    JSON.stringify({
+      status: response.status,
       code,
-      "Route information is temporarily unavailable.",
-      response.status === 429
-        ? 429
-        : response.status === 404
-          ? 404
-          : response.status === 409
-            ? 409
-            : 503,
-    );
-  }
+      dayNumber,
+      mode,
+    }),
+  );
 
+  throw new TravelError(
+    code,
+    message,
+    status,
+  );
+}
   const parsed =
     routeResponseSchema.safeParse(
-      await response.json().catch(() => null),
+      await response
+        .json()
+        .catch(() => null),
     );
 
   if (!parsed.success) {

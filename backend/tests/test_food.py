@@ -79,6 +79,9 @@ def candidate(**changes):
             "category": "restaurant",
             "latitude": 35.6895 + 1.2 / 111.195,
             "longitude": 139.6917,
+            "rating": 4.2,
+            "rating_scale": 5.0,
+            "rating_source": "google_maps",
             **changes,
         }
     )
@@ -217,7 +220,9 @@ async def test_timeout_missing_key_and_malformed_response():
 def test_diet_is_stronger_than_small_distance_advantage():
     req = request(dietary_preferences=["vegetarian"])
     unknown = candidate(
-        provider_place_id="unknown", name="Nearby", latitude=req.latitude + 0.3 / 111.195
+        provider_place_id="unknown",
+        name="Nearby",
+        latitude=req.latitude + 0.3 / 111.195,
     )
     confirmed = candidate(
         provider_place_id="confirmed", name="Vegetarian", dietary_tags=["vegetarian"]
@@ -290,7 +295,7 @@ def test_sorting_is_stable_and_no_rating_sort():
     assert sort_candidates([b, a]) == sort_candidates([a, b])
 
 
-async def test_controlled_fallback_cache_and_no_details_calls():
+async def test_controlled_fallback_cache_and_no_details_calls(monkeypatch):
     calls = []
 
     def handler(req):
@@ -303,7 +308,9 @@ async def test_controlled_fallback_cache_and_no_details_calls():
                 "features": [
                     feature(),
                     feature(
-                        place_id="unknown", categories=["catering.restaurant"], name="Unknown diet"
+                        place_id="unknown",
+                        categories=["catering.restaurant"],
+                        name="Unknown diet",
                     ),
                 ]
             },
@@ -311,6 +318,16 @@ async def test_controlled_fallback_cache_and_no_details_calls():
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         service = FoodRecommendationService(settings(), client)
+
+        async def rated(candidates, request):
+            return [
+                c.model_copy(
+                    update={"rating": 4.2, "rating_scale": 5.0, "rating_source": "google_maps"}
+                )
+                for c in candidates
+            ]
+
+        monkeypatch.setattr(service.google_maps, "enrich", rated)
         req = request(dietary_preferences=["vegetarian"])
         first, second = await asyncio.gather(service.search(req), service.search(req))
         assert len(calls) == 2 and first.dietary_fallback
@@ -357,7 +374,9 @@ async def test_fixture_safety_limits_and_internal_auth():
         ).status_code == 401
         headers = {"X-Nomvira-Internal-Key": KEY}
         response = await client.post(
-            "/api/v1/food/search", json=request().model_dump(mode="json"), headers=headers
+            "/api/v1/food/search",
+            json=request().model_dump(mode="json"),
+            headers=headers,
         )
         body = response.json()
         assert response.status_code == 200 and body["demo"]
@@ -402,7 +421,7 @@ async def test_explicit_development_demo_uses_no_live_credits():
         assert len(result.candidates) > 5
 
 
-async def test_supplemental_quota_failure_preserves_matches_and_pauses_new_searches():
+async def test_supplemental_quota_failure_preserves_matches_and_pauses_new_searches(monkeypatch):
     calls = []
 
     def handler(req):
@@ -413,6 +432,16 @@ async def test_supplemental_quota_failure_preserves_matches_and_pauses_new_searc
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         service = FoodRecommendationService(settings(), client)
+
+        async def rated(candidates, request):
+            return [
+                c.model_copy(
+                    update={"rating": 4.2, "rating_scale": 5.0, "rating_source": "google_maps"}
+                )
+                for c in candidates
+            ]
+
+        monkeypatch.setattr(service.google_maps, "enrich", rated)
         result = await service.search(request(dietary_preferences=["vegetarian"]))
         assert len(result.candidates) == 1 and not result.dietary_fallback
         with pytest.raises(AppError) as failure:

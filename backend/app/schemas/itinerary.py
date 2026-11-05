@@ -26,7 +26,12 @@ Pace = Literal["relaxed", "balanced", "packed"]
 Period = Literal["morning", "afternoon", "evening"]
 Kind = Literal["attraction", "food", "hotel", "free_time"]
 Reason = Literal[
-    "interest_match", "area_grouping", "pace_balance", "food_option", "selected_stay", "free_time"
+    "interest_match",
+    "area_grouping",
+    "pace_balance",
+    "food_option",
+    "selected_stay",
+    "free_time",
 ]
 Theme = Literal["discovery", "culture", "nature", "mixed", "relaxation"]
 Text = Annotated[str, Field(min_length=1, max_length=300)]
@@ -45,11 +50,11 @@ class PlanningAttraction(StrictModel):
     longitude: float = Field(ge=-180, le=180)
     distance_km: float = Field(ge=0, le=40080)
     opening_hours: str | None = Field(default=None, max_length=500)
-
+    notable: bool = False
 
 class PlanningFood(StrictModel):
     candidate_id: str = Field(min_length=1, max_length=512)
-    provider: Literal["geoapify"] = "geoapify"
+    provider: Literal["geoapify", "google_maps"] = "geoapify"
     name: Text
     category: FoodCategory
     cuisine_types: list[Annotated[str, Field(max_length=100)]] = Field(
@@ -139,13 +144,15 @@ class ItineraryDay(StrictModel):
 class GeneratedItinerary(StrictModel):
     # No model-authored factual prose. Titles, notes and facts are hydrated by the server.
     days: list[ItineraryDay] = Field(min_length=1, max_length=14)
-    warnings: list[Literal["insufficient_candidates"]] = Field(default_factory=list, max_length=1)
+    warnings: list[Literal["insufficient_candidates"]] = Field(
+        default_factory=list, max_length=1
+    )
 
 
 class ResolvedItem(StrictModel):
     candidate_type: Kind
     candidate_id: str | None
-    candidate_provider: Literal["openstreetmap", "geoapify", "stayapi"] | None
+    candidate_provider: Literal["openstreetmap", "geoapify", "google_maps", "stayapi"] | None
     period: Period
     title: str = Field(min_length=1, max_length=500)
     reason: str = Field(max_length=300)
@@ -181,4 +188,6 @@ class ItineraryGenerationResponse(StrictModel):
     prompt_version: str
     demo: bool
     itinerary: ItineraryDocument
-    budget: BudgetSummary  # Transient hotel quote math; never stored in itinerary versions.
+    budget: (
+        BudgetSummary  # Transient hotel quote math; never stored in itinerary versions.
+    )

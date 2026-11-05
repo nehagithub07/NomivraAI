@@ -4,7 +4,7 @@ export const foodCategoryLabels = { restaurant: "Restaurant", cafe: "Cafe", bar:
 export const cuisineOptions = ["Indian", "Italian", "Japanese", "Chinese", "Mexican", "Thai", "Korean", "French", "Mediterranean", "American", "Vietnamese", "Spanish", "Greek", "Seafood", "Sushi", "Pizza", "Ramen", "Burger", "Vegetarian-friendly"];
 export const defaultFoodCategories = ["restaurant", "cafe", "bar", "pub", "fast_food", "food_court"] as const;
 export type FoodFilters = { category: string; cuisine: string; diets: string[]; confirmedOnly: boolean; distanceKm: number };
-export const defaultFoodFilters: FoodFilters = { category: "", cuisine: "", diets: [], confirmedOnly: false, distanceKm: 5 };
+export const defaultFoodFilters: FoodFilters = { category: "", cuisine: "", diets: [], confirmedOnly: false, distanceKm: 10 };
 export function matchesDiets(candidate: Pick<FoodCandidate, "dietary_tags">, diets: string[]) {
   const tags = new Set(candidate.dietary_tags.map(tag => tag.replace(/\.only$/, "")));
   if (tags.has("vegan")) tags.add("vegetarian");

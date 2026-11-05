@@ -28,7 +28,7 @@ test("itinerary migration enforces atomic versions, signed persistence, trusted 
     await db.exec(`create role anon;create role authenticated;create schema auth;create table auth.users(id uuid primary key);
       create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
       grant usage on schema auth to anon,authenticated;insert into auth.users values ('${A}'),('${B}');`);
-    for (const file of ["20261028000100_create_trips.sql", "20261028000200_destination_intelligence.sql", "20261028000300_open_destination_providers.sql", "20261028000400_accommodation_selections.sql", "20261029000500_food_selections.sql", "20261029000600_itinerary_versions.sql"]) await db.exec(await readFile(new URL(`../supabase/migrations/${file}`, import.meta.url), "utf8"));
+    for (const file of ["20261028000100_create_trips.sql", "20261028000200_destination_intelligence.sql", "20261028000300_open_destination_providers.sql", "20261028000400_accommodation_selections.sql", "20261029000500_food_selections.sql", "20261029000600_itinerary_versions.sql", "20261105001100_rated_food_provider.sql"]) await db.exec(await readFile(new URL(`../supabase/migrations/${file}`, import.meta.url), "utf8"));
     await db.query("insert into nomvira_private.application_secrets(name,value) values ('internal_api_key',$1)", [KEY]);
     const form = { p_start_date: "2099-04-12", p_end_date: "2099-04-13", p_travelers_count: 2, p_budget_total: "2500.00", p_currency: "USD", p_budget_style: "balanced", p_travel_pace: "balanced", p_accommodation_preferences: ["hotel"], p_dietary_preferences: ["vegetarian"], p_special_requests: null, p_interests: ["food", "history"], p_time_zone: "UTC" };
     const tripId = (await asUser(db, A, () => db.query("select public.create_resolved_trip($1::jsonb,$2,$3) id", [form, ...sign({ kind: "destination", user_id: A, resolved_at: epoch(), expires_at: epoch() + 3600, destination })]))).rows[0].id;
@@ -110,6 +110,20 @@ test("itinerary migration enforces atomic versions, signed persistence, trusted 
       await assert.rejects(complete(first, document(), { user_id: B }, B), /Trip not found/);
       await assert.rejects(asUser(db, null, () => db.query("select public.begin_itinerary_generation($1,$2,true)", [tripId, randomUUID()]), "anon"), /permission denied/);
       await assert.rejects(asUser(db, A, () => db.query("insert into public.itinerary_versions(trip_id,request_id,version_number,trip_context) values ($1,$2,99,'{}')", [tripId, randomUUID()])), /permission denied/);
+    });
+    await t.test("rated Google Maps food keeps its source and cannot substitute another saved venue", async () => {
+      await asUser(db, A, () => db.query("select public.save_trip_food($1,$2)", sign({ kind: "food_selection", user_id: A, trip_id: tripId, expires_at: epoch() + 900, provider: "google_maps", provider_place_id: "saved-food", name: "Rated local cafe", category: "cafe", context: foodContext(trip) })));
+      await coolDown(); const id = await reserve();
+      const value = document();
+      const meal = { candidate_type: "food", candidate_provider: "google_maps", candidate_id: "saved-food", title: "Rated local cafe", period: "evening", reason: "Saved food option.", notes: null, category: "cafe", latitude: null, longitude: null, opening_hours: null };
+      value.days[0].items.push(meal);
+      meal.candidate_provider = "geoapify"; meal.title = "Rated local cafe";
+      await assert.rejects(complete(id, value), /Invalid itinerary food/);
+      meal.candidate_provider = "google_maps";
+      assert.equal((await complete(id, value)).rows[0].id, id);
+      const row = (await db.query("select f.provider from public.itinerary_items i join public.trip_food_selections f on f.id=i.food_selection_id where i.candidate_provider='google_maps'")).rows[0];
+      assert.equal(row.provider, "google_maps");
+      second = id;
     });
     await t.test("changed trip context and failed attempts preserve the current version", async () => {
       await coolDown(); const id = await reserve();

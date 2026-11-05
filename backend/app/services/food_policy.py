@@ -40,7 +40,9 @@ CUISINES = {
     )
 }
 CUISINES["vegetarian"] = "Vegetarian-friendly"
-DIET_CONDITIONS = {name: name for name in ("vegetarian", "vegan", "halal", "kosher", "gluten_free")}
+DIET_CONDITIONS = {
+    name: name for name in ("vegetarian", "vegan", "halal", "kosher", "gluten_free")
+}
 
 
 def cuisine_label(raw: str) -> str:

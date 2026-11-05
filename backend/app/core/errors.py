@@ -19,11 +19,16 @@ def register_error_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(RequestValidationError)
-    async def validation_error(_request: Request, _exc: RequestValidationError) -> JSONResponse:
+    async def validation_error(
+        _request: Request, _exc: RequestValidationError
+    ) -> JSONResponse:
         # Pydantic's default error includes input; never echo headers, tokens or payloads.
         return JSONResponse(
             status_code=422,
             content={
-                "error": {"code": "invalid_request", "message": "Check your request details."}
+                "error": {
+                    "code": "invalid_request",
+                    "message": "Check your request details.",
+                }
             },
         )

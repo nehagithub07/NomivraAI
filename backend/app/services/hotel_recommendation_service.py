@@ -42,10 +42,14 @@ def review_confidence(count: int | None) -> float:
 
 
 def stay_budget(request: AccommodationSearchRequest) -> Decimal:
-    return (request.trip_budget * BUDGET_ALLOCATION[request.budget_style]).quantize(Decimal(".01"))
+    return (request.trip_budget * BUDGET_ALLOCATION[request.budget_style]).quantize(
+        Decimal(".01")
+    )
 
 
-def comparable(candidate: AccommodationCandidate, request: AccommodationSearchRequest) -> bool:
+def comparable(
+    candidate: AccommodationCandidate, request: AccommodationSearchRequest
+) -> bool:
     return candidate.currency == request.currency and candidate.total_price is not None
 
 
@@ -59,7 +63,9 @@ def premium_eligible(candidate: AccommodationCandidate) -> bool:
     )
 
 
-def eligible(candidate: AccommodationCandidate, request: AccommodationSearchRequest) -> bool:
+def eligible(
+    candidate: AccommodationCandidate, request: AccommodationSearchRequest
+) -> bool:
     if candidate.available is False:
         return False
     if candidate.star_rating is not None and not 3 <= candidate.star_rating <= 5:
@@ -68,7 +74,6 @@ def eligible(candidate: AccommodationCandidate, request: AccommodationSearchRequ
         return False
     if (
         request.accommodation_preferences
-        and candidate.accommodation_type
         and candidate.accommodation_type not in request.accommodation_preferences
     ):
         return False
@@ -96,9 +101,15 @@ def score(
     raw_rating = rating(candidate)
     confidence = review_confidence(candidate.review_count)
     guest_quality = (
-        REVIEW_PRIOR + (raw_rating - REVIEW_PRIOR) * confidence if raw_rating is not None else 0.45
+        REVIEW_PRIOR + (raw_rating - REVIEW_PRIOR) * confidence
+        if raw_rating is not None
+        else 0.45
     )
-    location = 1 / (1 + candidate.distance_km / 5) if candidate.distance_km is not None else 0.4
+    location = (
+        1 / (1 + candidate.distance_km / 5)
+        if candidate.distance_km is not None
+        else 0.4
+    )
     preference = (
         1.0
         if not request.accommodation_preferences
@@ -106,7 +117,9 @@ def score(
         else 0.5
     )
     property_quality = (
-        candidate.star_rating / 5 if candidate.star_rating is not None else guest_quality
+        candidate.star_rating / 5
+        if candidate.star_rating is not None
+        else guest_quality
     )
     signals = ScoreComponents(
         budget_fit=budget_fit,
@@ -160,7 +173,8 @@ def rank(candidates: list[AccommodationCandidate], request: AccommodationSearchR
         if pool:
             # Stable tie order even when provider output order changes.
             best = max(
-                sorted(pool, key=lambda c: (c.provider, c.provider_accommodation_id)), key=metric
+                sorted(pool, key=lambda c: (c.provider, c.provider_accommodation_id)),
+                key=metric,
             )
             best.labels.append(label)
 
@@ -194,13 +208,17 @@ def rank(candidates: list[AccommodationCandidate], request: AccommodationSearchR
         lambda c: -c.total_price,
     )
     badge(
-        "Best Rated", [c for c in ranked if rating(c) is not None], lambda c: c.scores.guest_quality
+        "Best Rated",
+        [c for c in ranked if rating(c) is not None],
+        lambda c: c.scores.guest_quality,
     )
     badge(
         "Premium",
         [c for c in ranked if premium_eligible(c)],
         lambda c: (
-            0.4 * c.scores.property_quality + 0.4 * c.scores.guest_quality + 0.2 * c.scores.location
+            0.4 * c.scores.property_quality
+            + 0.4 * c.scores.guest_quality
+            + 0.2 * c.scores.location
         ),
     )
     return ranked
@@ -215,14 +233,17 @@ class HotelRecommendationService:
             else StayApiAccommodationProvider(http, settings)
         )
         self.cache = AccommodationCache[AccommodationInventory](
-            settings.accommodation_cache_ttl_seconds, settings.accommodation_cache_max_entries
+            settings.accommodation_cache_ttl_seconds,
+            settings.accommodation_cache_max_entries,
         )
         self.active = 0
         self.events: dict[str, list[float]] = {}
         self.last_refresh: dict[tuple, float] = {}
         self.provider_cooldown: tuple[float, AppError] | None = None
 
-    async def search(self, request: AccommodationSearchRequest) -> AccommodationSearchResponse:
+    async def search(
+        self, request: AccommodationSearchRequest
+    ) -> AccommodationSearchResponse:
         settings = self.settings
         mode = "fixture" if request.demo else settings.accommodation_provider
         if mode == "fixture" and (
@@ -236,14 +257,20 @@ class HotelRecommendationService:
         key = request.inventory_key(mode)
         cached = self.cache.peek(key)
         if request.cache_only and cached is None:
-            raise AppError("ACCOMMODATION_CACHE_MISS", "No current hotel recommendations.", 404)
+            raise AppError(
+                "ACCOMMODATION_CACHE_MISS", "No current hotel recommendations.", 404
+            )
         if request.refresh:
             now = time.monotonic()
             # Expired keys are removed too, keeping refresh metadata bounded.
-            self.last_refresh = {k: v for k, v in self.last_refresh.items() if now - v < 30}
+            self.last_refresh = {
+                k: v for k, v in self.last_refresh.items() if now - v < 30
+            }
             if key in self.last_refresh:
                 raise AppError(
-                    "ACCOMMODATION_RATE_LIMITED", "Wait before refreshing hotels again.", 429
+                    "ACCOMMODATION_RATE_LIMITED",
+                    "Wait before refreshing hotels again.",
+                    429,
                 )
             self.last_refresh[key] = now
             self.cache.remove(key)
@@ -266,14 +293,18 @@ class HotelRecommendationService:
             events = self.events.setdefault(owner, [])
             if len(events) >= 6 or self.active >= 2:
                 raise AppError(
-                    "ACCOMMODATION_RATE_LIMITED", "Wait before searching hotels again.", 429
+                    "ACCOMMODATION_RATE_LIMITED",
+                    "Wait before searching hotels again.",
+                    429,
                 )
             events.append(now)
             self.active += 1
             try:
                 async with asyncio.timeout(35):
                     provider = (
-                        FixtureAccommodationProvider() if mode == "fixture" else self.provider
+                        FixtureAccommodationProvider()
+                        if mode == "fixture"
+                        else self.provider
                     )
                     candidates = await provider.search(request)
             except TimeoutError:
@@ -296,7 +327,8 @@ class HotelRecommendationService:
                 provider=mode,
                 demo=mode == "fixture",
                 searched_at=now,
-                expires_at=now + timedelta(seconds=settings.accommodation_cache_ttl_seconds),
+                expires_at=now
+                + timedelta(seconds=settings.accommodation_cache_ttl_seconds),
                 candidates=candidates,
             )
 
@@ -313,7 +345,9 @@ class HotelRecommendationService:
             currency=request.currency,
             candidates=rank(inventory.candidates, request),
             returned_before_filters=len(inventory.candidates),
-            attribution="Demo accommodation data — fictional properties, prices and reviews."
-            if inventory.demo
-            else "Hotel data via StayAPI · Booking.com source. Quotes may exclude local charges.",
+            attribution=(
+                "Demo accommodation data — fictional properties, prices and reviews."
+                if inventory.demo
+                else "Hotel data via StayAPI · Booking.com source. Quotes may exclude local charges."
+            ),
         )

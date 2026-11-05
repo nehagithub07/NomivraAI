@@ -53,7 +53,7 @@ export async function sendCompanionMessage(db: DB, tripId: string, userId: strin
     if (!reservation.response) throw new TravelError("COMPANION_RATE_LIMITED", "This message is still processing. Reload in a moment.", 429);
     return getCompanionState(db, tripId, userId);
   }
-  const deadline = Date.now() + 85_000;
+  const deadline = Date.now() + 110_000;
   let response: CompanionResponse | null = null, pending: PublicAction | undefined, failure: unknown;
   try {
     const state = await getCompanionState(db, tripId, userId);
@@ -61,7 +61,7 @@ export async function sendCompanionMessage(db: DB, tripId: string, userId: strin
     const reference = state.messages.findLast(m => m.role === "assistant" && m.reference_date)?.reference_date;
     if (reference && reference >= trip.start_date && reference <= trip.end_date) context.reference_date = reference;
     const history = state.messages.filter(m => m.id !== requestId).slice(-12).map(m => ({ role: m.role, content: m.content }));
-    let step = await callTravelApi("companion/chat", { user_id: userId, trip_id: tripId, message, context, history }, stepSchema);
+    let step = await callTravelApi("companion/chat" as Parameters<typeof callTravelApi>[0], { user_id: userId, trip_id: tripId, message, context, history }, stepSchema);
     let count = 0;
     while (!step.response) {
       if (!step.continuation_id || !step.calls.length || (count += step.calls.length) > 5 || Date.now() > deadline) throw new TravelError("COMPANION_TOOL_LIMIT", "Please ask one smaller trip question at a time.", 422);
@@ -83,7 +83,7 @@ export async function sendCompanionMessage(db: DB, tripId: string, userId: strin
           results.push({ call_id: call.id, name: call.name, status: error instanceof z.ZodError || error instanceof TravelError && error.status === 422 ? "invalid_arguments" : "unavailable", data: { message: "This trip data or action is unavailable. Check the relevant trip tab or clarify your request." } });
         }
       }
-      step = await callTravelApi("companion/chat", { user_id: userId, trip_id: tripId, continuation_id: step.continuation_id, results }, stepSchema);
+      step = await callTravelApi("companion/chat" as Parameters<typeof callTravelApi>[0], { user_id: userId, trip_id: tripId, continuation_id: step.continuation_id, results }, stepSchema);
     }
     response = step.response;
   } catch (error) { failure = error; }

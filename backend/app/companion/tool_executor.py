@@ -37,8 +37,9 @@ def validate_call(name: str, arguments: dict, context: CompanionContext, message
         raise AppError(
             "COMPANION_INVALID_ARGUMENTS", "Check the requested trip details.", 422
         ) from None
-    if tool.permission == ToolPermission.WRITE_CONFIRMATION_REQUIRED and not may_propose_write(
-        message
+    if (
+        tool.permission == ToolPermission.WRITE_CONFIRMATION_REQUIRED
+        and not may_propose_write(message)
     ):
         raise AppError(
             "COMPANION_CONFIRMATION_REQUIRED",
@@ -51,15 +52,20 @@ def validate_call(name: str, arguments: dict, context: CompanionContext, message
     if name == "add_budget_entry":
         if args["currency"] != context.currency or Decimal(args["amount"]) > 100000000:
             raise AppError(
-                "COMPANION_INVALID_ARGUMENTS", "Use the trip currency and a valid amount.", 422
+                "COMPANION_INVALID_ARGUMENTS",
+                "Use the trip currency and a valid amount.",
+                422,
             )
         text = re.sub(r"\bday\s*\d+\b|\d{4}-\d{2}-\d{2}", "", message, flags=re.I)
         amounts = [
-            Decimal(value.replace(",", "")) for value in re.findall(r"\d[\d,]*(?:\.\d{1,2})?", text)
+            Decimal(value.replace(",", ""))
+            for value in re.findall(r"\d[\d,]*(?:\.\d{1,2})?", text)
         ]
         if Decimal(args["amount"]) not in amounts:
             raise AppError(
-                "COMPANION_INVALID_ARGUMENTS", "Enter the expense amount explicitly.", 422
+                "COMPANION_INVALID_ARGUMENTS",
+                "Enter the expense amount explicitly.",
+                422,
             )
         currency_markers = {
             "EUR": r"€|\bEUR\b|\beuros?\b",
@@ -75,7 +81,9 @@ def validate_call(name: str, arguments: dict, context: CompanionContext, message
             for code, pattern in currency_markers.items()
         ):
             raise AppError(
-                "COMPANION_INVALID_ARGUMENTS", "Currency conversion is not supported.", 422
+                "COMPANION_INVALID_ARGUMENTS",
+                "Currency conversion is not supported.",
+                422,
             )
         args["amount"] = f"{Decimal(args['amount']):.2f}"
     return args
@@ -83,13 +91,17 @@ def validate_call(name: str, arguments: dict, context: CompanionContext, message
 
 def checked_result(result: ToolResult, call: ToolCall):
     if result.call_id != call.id or result.name != call.name:
-        raise AppError("COMPANION_INVALID_RESULT", "Reload the companion and try again.", 422)
+        raise AppError(
+            "COMPANION_INVALID_RESULT", "Reload the companion and try again.", 422
+        )
 
     def walk(value):
         if isinstance(value, dict):
             if any(str(key).lower() in FORBIDDEN_KEYS for key in value):
                 raise AppError(
-                    "COMPANION_INVALID_RESULT", "Tool data could not be safely used.", 502
+                    "COMPANION_INVALID_RESULT",
+                    "Tool data could not be safely used.",
+                    502,
                 )
             for child in value.values():
                 walk(child)
@@ -105,5 +117,7 @@ def checked_result(result: ToolResult, call: ToolCall):
         "invalid_arguments",
         "unavailable",
     ):
-        raise AppError("COMPANION_INVALID_RESULT", "Changes require confirmation first.", 502)
+        raise AppError(
+            "COMPANION_INVALID_RESULT", "Changes require confirmation first.", 502
+        )
     return result

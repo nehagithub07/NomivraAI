@@ -15,7 +15,9 @@ def destination_today(context: CompanionContext, now: datetime | None = None):
         return None
 
 
-def resolve_trip_date(value: str, context: CompanionContext, now: datetime | None = None) -> str:
+def resolve_trip_date(
+    value: str, context: CompanionContext, now: datetime | None = None
+) -> str:
     value = value.strip().lower()
     today = destination_today(context, now)
     match = re.fullmatch(r"day[_ ]([1-9]|1[0-4])", value)
@@ -37,7 +39,15 @@ def resolve_trip_date(value: str, context: CompanionContext, now: datetime | Non
                 422,
             )
         result = context.reference_date + timedelta(days=1)
-    elif value in ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"):
+    elif value in (
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+        "sunday",
+    ):
         weekday = (
             "monday",
             "tuesday",
@@ -47,10 +57,14 @@ def resolve_trip_date(value: str, context: CompanionContext, now: datetime | Non
             "saturday",
             "sunday",
         ).index(value)
-        first = context.start_date + timedelta(days=(weekday - context.start_date.weekday()) % 7)
+        first = context.start_date + timedelta(
+            days=(weekday - context.start_date.weekday()) % 7
+        )
         if first > context.end_date or first + timedelta(days=7) <= context.end_date:
             raise AppError(
-                "COMPANION_INVALID_DATE", "Choose a calendar date or trip day number.", 422
+                "COMPANION_INVALID_DATE",
+                "Choose a calendar date or trip day number.",
+                422,
             )
         result = first
     else:
@@ -58,7 +72,9 @@ def resolve_trip_date(value: str, context: CompanionContext, now: datetime | Non
             result = date.fromisoformat(value)
         except ValueError:
             raise AppError(
-                "COMPANION_INVALID_DATE", "Choose a calendar date or trip day number.", 422
+                "COMPANION_INVALID_DATE",
+                "Choose a calendar date or trip day number.",
+                422,
             ) from None
     if not context.start_date <= result <= context.end_date:
         raise AppError("COMPANION_INVALID_DATE", "That date is outside this trip.", 422)

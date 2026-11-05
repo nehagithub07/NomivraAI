@@ -162,9 +162,10 @@ async def test_cancelled_active_call_releases_slot():
 
 
 @pytest.mark.parametrize(
-    "failure", ["429", "timeout", "connect_timeout", "connection_error", "invalid_response"]
+    "failure",
+    ["429", "timeout", "connect_timeout", "connection_error", "invalid_response"],
 )
-async def test_provider_failures_release_slot_and_do_not_retry(failure, caplog):
+async def test_provider_failures_fail_over_and_release_slot(failure, caplog):
     caplog.set_level(logging.INFO)
     calls = 0
 
@@ -186,57 +187,62 @@ async def test_provider_failures_release_slot_and_do_not_retry(failure, caplog):
         return httpx.Response(200, json={"elements": []})
 
     app = create_app(
-        Settings(_env_file=None, nomvira_internal_api_key=KEY), httpx.MockTransport(handler)
+        Settings(_env_file=None, nomvira_internal_api_key=KEY),
+        httpx.MockTransport(handler),
     )
     app.state.limits = ProviderLimits(discovery_cooldown_seconds=0)
     async with (
         app.router.lifespan_context(app),
-        httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
+        httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as api,
     ):
         response = await api.post("/api/v1/places/discover", headers=HEADERS, json=BODY)
-        expected = {
-            "429": "PLACES_PROVIDER_RATE_LIMITED",
-            "timeout": "PLACES_PROVIDER_UNAVAILABLE",
-            "connect_timeout": "PLACES_PROVIDER_CONNECT_TIMEOUT",
-            "connection_error": "PLACES_PROVIDER_CONNECTION_ERROR",
-            "invalid_response": "PLACES_PROVIDER_INVALID_RESPONSE",
-        }[failure]
-        assert response.json()["error"]["code"] == expected
-        assert response.status_code == (
-            429 if failure == "429" else 502 if failure == "invalid_response" else 503
-        )
-        assert calls == 1 and not app.state.limits.discovery_lock.locked()
+        assert response.status_code == 200
+        assert calls == 2 and not app.state.limits.discovery_lock.locked()
         assert (
             await api.post("/api/v1/places/discover", headers=HEADERS, json=BODY)
         ).status_code == 200
-        assert calls == 2
+        assert calls == 3
     assert "PRIVATE" not in caplog.text and KEY not in caplog.text
     assert "discovery_slot_released" in caplog.text
     if failure == "connect_timeout":
         assert "places_provider_timeout phase=connect" in caplog.text
     if failure == "connection_error":
-        assert "places_provider_failure reason=transport type=ConnectError" in caplog.text
+        assert (
+            "places_provider_failure reason=transport type=ConnectError" in caplog.text
+        )
 
 
 async def test_route_returns_local_429_without_calling_provider_when_wait_expires():
     app = create_app(
         Settings(_env_file=None, nomvira_internal_api_key=KEY),
-        httpx.MockTransport(lambda request: pytest.fail("No provider call while slot is held")),
+        httpx.MockTransport(
+            lambda request: pytest.fail("No provider call while slot is held")
+        ),
     )
-    app.state.limits = ProviderLimits(discovery_wait_seconds=0.03, discovery_cooldown_seconds=0)
+    app.state.limits = ProviderLimits(
+        discovery_wait_seconds=0.03, discovery_cooldown_seconds=0
+    )
     async with (
         app.router.lifespan_context(app),
-        httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
+        httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as api,
     ):
         async with app.state.limits.discovery():
-            response = await api.post("/api/v1/places/discover", headers=HEADERS, json=BODY)
+            response = await api.post(
+                "/api/v1/places/discover", headers=HEADERS, json=BODY
+            )
             assert response.status_code == 429
             assert response.json()["error"]["code"] == "PLACES_RATE_LIMITED"
             assert app.state.limits.discovery_lock.locked()
         assert not app.state.limits.discovery_lock.locked()
 
 
-async def test_route_releases_slot_after_runtime_error_and_response_validation(monkeypatch):
+async def test_route_releases_slot_after_runtime_error_and_response_validation(
+    monkeypatch,
+):
     app = create_app(Settings(_env_file=None, nomvira_internal_api_key=KEY))
     app.state.limits = ProviderLimits(discovery_cooldown_seconds=0)
     calls = 0
@@ -247,7 +253,9 @@ async def test_route_releases_slot_after_runtime_error_and_response_validation(m
         if calls == 1:
             raise RuntimeError("Synthetic runtime error after acquisition")
         if calls == 2:
-            return PlaceDiscoveryResponse(latitude=999, longitude=0, radius_meters=5000, places=[])
+            return PlaceDiscoveryResponse(
+                latitude=999, longitude=0, radius_meters=5000, places=[]
+            )
         return PlaceDiscoveryResponse(
             latitude=body.latitude,
             longitude=body.longitude,
