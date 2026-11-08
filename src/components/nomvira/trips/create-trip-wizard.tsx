@@ -19,6 +19,7 @@ import { BudgetStep } from "./steps/budget-step";
 import { InterestsStep } from "./steps/interests-step";
 import { PreferencesStep } from "./steps/preferences-step";
 import { ReviewStep } from "./steps/review-step";
+import type { Preferences } from "@/lib/memory/validation";
 
 function subscribeCalendar(notify: () => void) {
   const timer = window.setInterval(notify, 60_000);
@@ -30,7 +31,7 @@ function browserCalendar() {
   return `${todayInTimeZone(timeZone)}|${timeZone}`;
 }
 
-export function CreateTripWizard({ initialDestination, initialToday }: { initialDestination: string; initialToday: string }) {
+export function CreateTripWizard({ initialDestination, initialToday, initialPreferences }: { initialDestination: string; initialToday: string; initialPreferences?: Preferences }) {
   const router = useRouter();
   const calendar = useSyncExternalStore(subscribeCalendar, browserCalendar, () => `${initialToday}|UTC`);
   const [today, timeZone] = calendar.split("|");
@@ -44,7 +45,7 @@ export function CreateTripWizard({ initialDestination, initialToday }: { initial
   const navigationLock = useRef(false);
   const submissionLock = useRef(false);
   const methods = useForm<TripFormValues>({
-    defaultValues: { ...defaultTripValues, destination: initialDestination },
+    defaultValues: { ...defaultTripValues, ...initialPreferences, destination: initialDestination },
     resolver: zodResolver(createTripFormSchema(today)), shouldUnregister: false,
     mode: "onSubmit", reValidateMode: "onChange",
   });

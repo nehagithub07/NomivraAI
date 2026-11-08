@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import Field
 
 from app.schemas.itinerary import Interest, PlanningInput, StrictModel
+from app.schemas.memory import RetrievedMemory
 
 Text = Annotated[str, Field(min_length=1, max_length=2000, pattern=r"^[^\x00]+$")]
 ToolName = Literal[
@@ -30,6 +31,7 @@ ToolName = Literal[
 
 
 class CompanionContext(StrictModel):
+    travel_memories: list[RetrievedMemory] = Field(default_factory=list, max_length=5)
     destination: str = Field(min_length=1, max_length=160)
     country: str | None = Field(default=None, max_length=160)
     timezone: str | None = Field(default=None, max_length=100)

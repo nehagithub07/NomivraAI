@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from app.core.config import Settings
 from app.core.errors import AppError
+from app.core.observability import model_request
 from app.providers.llm.base import LLMProvider
 from app.providers.llm.context import compact_planning_context
 from app.providers.llm.prompt import SYSTEM_PROMPT
@@ -335,7 +336,7 @@ class GeminiLLMProvider(LLMProvider):
                         async with asyncio.timeout(
                             12 if fallback != model else COMPANION_ATTEMPT_TIMEOUT_SECONDS
                         ):
-                            response = await client.models.generate_content(
+                            response = await model_request(client.models.generate_content,
                                 model=model,
                                 contents=contents,
                                 config=config,
@@ -360,7 +361,7 @@ class GeminiLLMProvider(LLMProvider):
                                 )
                             }
                         )
-                        response = await client.models.generate_content(
+                        response = await model_request(client.models.generate_content,
                             model=model,
                             contents=contents,
                             config=config,
@@ -485,7 +486,7 @@ class GeminiLLMProvider(LLMProvider):
             raise
 
         except Exception as error:
-            logger.exception(
+            logger.error(
                 ("companion_provider_failed reason=unexpected error_type=%s"),
                 type(error).__name__,
             )
@@ -600,7 +601,7 @@ class GeminiLLMProvider(LLMProvider):
                 http_options=types.HttpOptions(retry_options=types.HttpRetryOptions(attempts=1)),
             ).aio as client:
                 async with asyncio.timeout(GEMINI_ATTEMPT_TIMEOUT_SECONDS):
-                    response = await client.models.generate_content(
+                    response = await model_request(client.models.generate_content,
                         model=model,
                         contents=prompt,
                         config=types.GenerateContentConfig(
@@ -751,7 +752,7 @@ class GeminiLLMProvider(LLMProvider):
             raise
 
         except Exception as error:
-            logger.exception(
+            logger.error(
                 ("itinerary_provider_failed reason=unexpected error_type=%s"),
                 type(error).__name__,
             )

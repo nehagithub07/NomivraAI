@@ -26,6 +26,7 @@ MAX_RESULTS = 30
 # Do not allow one public server to consume the
 # whole Next.js request lifetime.
 OVERPASS_TOTAL_TIMEOUT_SECONDS = 14
+DISCOVERY_TIMEOUT_SECONDS = 40
 
 
 USEFUL_TAGS = {
@@ -274,6 +275,7 @@ def build_query(
     longitude: float,
     radius: int,
     limit: int,
+    timeout_seconds: int = 10,
 ) -> str:
     """
     Keep the query intentionally targeted.
@@ -331,7 +333,7 @@ def build_query(
 
     return (
         "[out:json]"
-        "[timeout:10]"
+        f"[timeout:{max(1, min(10, timeout_seconds))}]"
         "[maxsize:16777216];"
         "("
         # -----------------------------------------
@@ -627,6 +629,7 @@ class OpenStreetMapOverpassProvider(PlacesProvider):
             limit,
             MAX_RESULTS,
         )
+        deadline = time.monotonic() + DISCOVERY_TIMEOUT_SECONDS
 
         # Geoapify serves the same attributed OSM records without depending on
         # a busy public Overpass instance. Query the entire city before ranking
@@ -641,13 +644,6 @@ class OpenStreetMapOverpassProvider(PlacesProvider):
                     return places
             except AppError as exc:
                 logger.warning("geoapify_places_failed code=%s", exc.code)
-
-        query = build_query(
-            latitude,
-            longitude,
-            effective_radius,
-            effective_limit,
-        )
 
         endpoints = self.endpoints()
 
@@ -669,6 +665,19 @@ class OpenStreetMapOverpassProvider(PlacesProvider):
             endpoints,
             start=1,
         ):
+            remaining = deadline - time.monotonic()
+            if remaining <= 1:
+                break
+            attempt_timeout = min(
+                OVERPASS_TOTAL_TIMEOUT_SECONDS, remaining / (len(endpoints) - attempt + 1)
+            )
+            query = build_query(
+                latitude,
+                longitude,
+                effective_radius,
+                effective_limit,
+                max(1, int(attempt_timeout) - 3),
+            )
             host = httpx.URL(endpoint).host or "unknown"
 
             started = time.monotonic()
@@ -689,7 +698,7 @@ class OpenStreetMapOverpassProvider(PlacesProvider):
                     provider="PLACES",
                     # Short enough that a failed server
                     # cannot consume the whole web request.
-                    total_timeout=OVERPASS_TOTAL_TIMEOUT_SECONDS,
+                    total_timeout=attempt_timeout,
                     timeout=httpx.Timeout(
                         connect=4.0,
                         read=11.0,
@@ -780,8 +789,7 @@ class OpenStreetMapOverpassProvider(PlacesProvider):
             params={
                 "apiKey": api_key,
                 "categories": (
-                    "tourism.sights,entertainment.museum,"
-                    "entertainment.theme_park,entertainment.zoo"
+                    "tourism.sights,entertainment.museum,entertainment.theme_park,entertainment.zoo"
                 ),
                 "filter": f"circle:{longitude},{latitude},{radius_meters}",
                 "bias": f"proximity:{longitude},{latitude}",

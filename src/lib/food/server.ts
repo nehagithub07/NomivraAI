@@ -234,6 +234,7 @@ export function getCachedFood(
 export function foodSelectionFailure(
   error: {
     code?: string;
+    message?: string;
   },
 ) {
   if (
@@ -248,7 +249,7 @@ export function foodSelectionFailure(
       error.code
       ??
       "",
-    )
+    ) || error.code === "23514" && error.message?.includes("trip_food_selections_provider_check")
   ) {
     return new TravelError(
       "setup_required",

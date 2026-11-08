@@ -6,12 +6,14 @@ function transactionBody(sql) {
   return sql.replace(/^\s*begin;\s*/i, "").replace(/\s*commit;\s*$/i, "");
 }
 
-export function buildTripDatabaseSetup(foundation, openProviders, internalKey, accommodations = "", food = "", itinerary = "", budget = "", weather = "", companion = "", travelFixes = "") {
+export function buildTripDatabaseSetup(foundation, openProviders, internalKey, accommodations = "", food = "", itinerary = "", budget = "", weather = "", companion = "", travelFixes = "", memory = "", sharing = "") {
   if (typeof internalKey !== "string" || internalKey.length < 32) throw new Error("Configure NOMVIRA_INTERNAL_API_KEY in .env.local first.");
   if (foundation.includes("$nomvira_foundation$") || openProviders.includes("$nomvira_open_providers$") || accommodations.includes("$nomvira_accommodations$") || food.includes("$nomvira_food$") || itinerary.includes("$nomvira_itinerary$") || budget.includes("$nomvira_budget$")) throw new Error("Unexpected migration delimiter.");
   const secret = internalKey.replaceAll("'", "''");
   if (weather.includes("$nomvira_weather$")) throw new Error("Unexpected migration delimiter.");
   if (companion.includes("$nomvira_companion$")) throw new Error("Unexpected migration delimiter.");
+  if (memory.includes("$nomvira_memory$")) throw new Error("Unexpected migration delimiter.");
+  if (sharing.includes("$nomvira_sharing$")) throw new Error("Unexpected migration delimiter.");
   return `-- PRIVATE LOCAL FILE: contains the internal application secret. Do not share or commit.
 -- Run once in your project's Supabase SQL Editor as database owner.
 -- Atomic and safe to rerun against the supported Step 5/6/7/8/9/10/11 schema.
@@ -58,6 +60,20 @@ begin
     or to_regprocedure('public.create_resolved_trip(jsonb,text,text)') is null then
     raise exception 'Trip schema is incomplete. No setup changes were committed.';
   end if;
+  ${memory ? `if to_regclass('public.travel_preferences') is null then
+    execute $nomvira_memory$${transactionBody(memory)}$nomvira_memory$;
+  end if;
+  if to_regclass('public.travel_memories') is null
+    or to_regprocedure('public.claim_travel_memory_index(uuid)') is null then
+    raise exception 'Memory schema is incomplete. No setup changes were committed.';
+  end if;` : ""}
+  ${sharing ? `if to_regclass('public.trip_shares') is null then
+    execute $nomvira_sharing$${transactionBody(sharing)}$nomvira_sharing$;
+  end if;
+  if to_regprocedure('public.get_shared_trip(text)') is null
+    or to_regprocedure('public.revoke_trip_share(uuid)') is null then
+    raise exception 'Sharing schema is incomplete. No setup changes were committed.';
+  end if;` : ""}
   ${companion ? `if to_regclass('public.companion_conversations') is null then
     execute $nomvira_companion$${transactionBody(companion)}$nomvira_companion$;
   end if;
@@ -80,7 +96,7 @@ export async function prepareTripDatabase(root = process.cwd()) {
   const match = envText.match(/^\s*NOMVIRA_INTERNAL_API_KEY\s*=\s*(?:"([^"\r\n]*)"|'([^'\r\n]*)'|([^#\r\n]*))/m);
   const internalKey = match && (match[1] ?? match[2] ?? match[3]).trim();
   const directory = path.join(root, "supabase", "migrations");
-  const [foundation, openProviders, accommodations, food, itinerary, budget, weather, companion, placeRefresh, ratedFood] = await Promise.all([
+  const [foundation, openProviders, accommodations, food, itinerary, budget, weather, companion, placeRefresh, ratedFood, memory, sharing] = await Promise.all([
     readFile(path.join(directory, "20261028000200_destination_intelligence.sql"), "utf8"),
     readFile(path.join(directory, "20261028000300_open_destination_providers.sql"), "utf8"),
     readFile(path.join(directory, "20261028000400_accommodation_selections.sql"), "utf8"),
@@ -91,11 +107,13 @@ export async function prepareTripDatabase(root = process.cwd()) {
     readFile(path.join(directory, "20261030000900_ai_companion.sql"), "utf8"),
     readFile(path.join(directory, "20261030001000_place_refresh_and_map_backfill.sql"), "utf8"),
     readFile(path.join(directory, "20261105001100_rated_food_provider.sql"), "utf8"),
+    readFile(path.join(directory, "20261106001200_personalization_memory.sql"), "utf8"),
+    readFile(path.join(directory, "20261106001300_trip_sharing.sql"), "utf8"),
   ]);
   const output = path.join(root, ".qa", "setup-trip-database.sql");
   await mkdir(path.dirname(output), { recursive: true });
   const travelFixes = transactionBody(placeRefresh) + "\n" + transactionBody(ratedFood);
-  await writeFile(output, buildTripDatabaseSetup(foundation, openProviders, internalKey, accommodations, food, itinerary, budget, weather, companion, travelFixes), { mode: 0o600 });
+  await writeFile(output, buildTripDatabaseSetup(foundation, openProviders, internalKey, accommodations, food, itinerary, budget, weather, companion, travelFixes, memory, sharing), { mode: 0o600 });
   return output;
 }
 

@@ -9,4 +9,5 @@ const dispatcher = processState.__nomviraSupabaseAgent ??= new Agent({
 
 export const supabaseFetch: typeof fetch = (input, init) => fetch(input, {
   ...init, cache: "no-store", dispatcher,
+  signal: AbortSignal.any([AbortSignal.timeout(15_000), ...(init?.signal ? [init.signal] : input instanceof Request ? [input.signal] : [])]),
 } as RequestInit & { dispatcher: Agent });

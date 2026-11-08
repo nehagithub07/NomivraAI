@@ -1,4 +1,5 @@
 import "server-only";
+import { retrieveTravelMemories } from "@/lib/memory/server";
 
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -974,7 +975,7 @@ export async function generateTripItinerary(
           user_id:
             userId,
 
-          context,
+          context: { ...context, travel_memories: await retrieveTravelMemories(db, userId, trip) },
         },
 
         generationResponseSchema,

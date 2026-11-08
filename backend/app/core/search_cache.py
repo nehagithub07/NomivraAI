@@ -3,6 +3,7 @@ import time
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 
+from app.core.observability import cache_event
 from app.schemas.destination import DestinationSearchResponse
 
 
@@ -12,9 +13,7 @@ class DestinationSearchCache:
     def __init__(self, ttl_seconds: float = 300, max_entries: int = 128):
         self.ttl_seconds = ttl_seconds
         self.max_entries = max_entries
-        self.entries: OrderedDict[tuple, tuple[float, DestinationSearchResponse]] = (
-            OrderedDict()
-        )
+        self.entries: OrderedDict[tuple, tuple[float, DestinationSearchResponse]] = OrderedDict()
         self.pending: dict[tuple, asyncio.Task[DestinationSearchResponse]] = {}
 
     async def get_or_load(
@@ -22,10 +21,14 @@ class DestinationSearchCache:
     ) -> DestinationSearchResponse:
         cached = self.entries.get(key)
         if cached and cached[0] > time.monotonic():
+            cache_event("hit")
             self.entries.move_to_end(key)
             return cached[1].model_copy(deep=True)
         self.entries.pop(key, None)
+        cache_event("miss")
         task = self.pending.get(key)
+        if task is not None:
+            cache_event("coalesced")
         if task is None:
 
             async def fill() -> DestinationSearchResponse:
@@ -40,9 +43,7 @@ class DestinationSearchCache:
                     self.pending.pop(key, None)
 
             task = asyncio.create_task(fill())
-            task.add_done_callback(
-                lambda done: None if done.cancelled() else done.exception()
-            )
+            task.add_done_callback(lambda done: None if done.cancelled() else done.exception())
             self.pending[key] = task
         # A cancelled waiter must not cancel another user's identical search.
         return (await asyncio.shield(task)).model_copy(deep=True)

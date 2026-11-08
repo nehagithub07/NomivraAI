@@ -247,6 +247,10 @@ temp/
 # ---------------------------------------------------------
 
 exports/
+!src/lib/exports/
+!src/lib/exports/**
+!src/components/nomvira/exports/
+!src/components/nomvira/exports/**
 generated/
 generated-files/
 

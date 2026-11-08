@@ -13,7 +13,7 @@ export function AppShell({
   identity: UserIdentity;
 }) {
   return (
-    <div className="min-h-dvh">
+    <div className="app-shell min-h-dvh">
       <a
         href="#main-content"
         className="sr-only fixed top-4 left-4 z-50 rounded-md bg-primary px-4 py-3 text-primary-foreground focus:not-sr-only"
@@ -21,7 +21,7 @@ export function AppShell({
         Skip to content
       </a>
       <AppSidebar />
-      <div className="min-w-0 lg:pl-64">
+      <div className="app-shell-body min-w-0 lg:pl-64">
         <AppHeader identity={identity} />
         <main id="main-content" tabIndex={-1}>
           <PageContainer className="max-w-[1440px] pt-8 pb-[calc(6rem+env(safe-area-inset-bottom))] md:py-10 lg:py-12">

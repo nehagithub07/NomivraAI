@@ -2,6 +2,7 @@
 
 import {
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -132,6 +133,7 @@ export function TripMapWorkspace({
     loading,
     setLoading,
   ] = useState(false);
+  const routePending = useRef(false);
 
 
   const [
@@ -316,13 +318,14 @@ export function TripMapWorkspace({
     nextDay = dayNumber,
   ) {
     if (
-      loading ||
+      routePending.current || loading ||
       itineraryPoints.length < 2
     ) {
       return;
     }
 
 
+    routePending.current = true;
     setLoading(true);
     setError("");
     setErrorCode("");
@@ -346,6 +349,7 @@ export function TripMapWorkspace({
           {
             method: "GET",
             cache: "no-store",
+            signal: AbortSignal.timeout(30_000),
           },
         );
 
@@ -452,6 +456,7 @@ export function TripMapWorkspace({
       );
 
     } finally {
+      routePending.current = false;
       setLoading(false);
     }
   }

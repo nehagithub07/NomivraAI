@@ -20,6 +20,7 @@ def compact_planning_context(context: TripPlanningContext) -> dict:
             "special_requests",
             "budget",
             "proximity",
+            "travel_memories",
         },
         exclude_none=True,
     )

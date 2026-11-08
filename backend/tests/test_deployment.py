@@ -35,6 +35,7 @@ def test_complete_production_environment():
         ({"food_provider": "fixture"}, "FOOD_PROVIDER"),
         ({"accommodation_provider": "fixture"}, "ACCOMMODATION_PROVIDER"),
         ({"allow_demo_accommodations": True}, "ALLOW_DEMO_ACCOMMODATIONS"),
+        ({"openrouteservice_base_url": "https://localhost/routing"}, "OPENROUTESERVICE_BASE_URL"),
     ],
 )
 def test_invalid_production_environment_fails_without_echoing_values(changes, name):

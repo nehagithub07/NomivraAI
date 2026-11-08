@@ -28,7 +28,7 @@ export function NomviraInsightCard({
             NomviraAI Insight
           </h2>
           <AccentBadge className="text-[0.6875rem] font-normal">
-            Example insight
+            {insight.destination ? "Example insight" : "Your preferences"}
           </AccentBadge>
         </div>
         <h3 className="type-section mt-6 max-w-sm text-balance">
@@ -38,10 +38,10 @@ export function NomviraInsightCard({
           {insight.description}
         </p>
         <Link
-          href={`/explore?destination=${encodeURIComponent(insight.destination)}`}
+          href={insight.destination ? `/explore?destination=${encodeURIComponent(insight.destination)}` : "/settings"}
           className="type-small mt-6 inline-flex min-h-11 w-fit items-center gap-2 font-medium"
         >
-          Explore {insight.destination}
+          {insight.destination ? `Explore ${insight.destination}` : "Preferences & Memory"}
           <ArrowRight className="size-4" aria-hidden="true" />
         </Link>
       </SurfaceCard>

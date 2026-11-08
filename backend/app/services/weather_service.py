@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.core.errors import AppError
+from app.core.observability import cache_event
 from app.providers.weather.base import WeatherProvider
 from app.schemas.weather import (
     CoverageGap,
@@ -56,11 +57,7 @@ class WeatherService:
             availability=(
                 "past_trip"
                 if request.end_date < today
-                else (
-                    "not_yet_available"
-                    if request.start_date > horizon
-                    else "unavailable"
-                )
+                else ("not_yet_available" if request.start_date > horizon else "unavailable")
             ),
         )
         if empty.availability != "unavailable":
@@ -69,9 +66,7 @@ class WeatherService:
                     start_date=request.start_date,
                     end_date=request.end_date,
                     reason=(
-                        "past"
-                        if empty.availability == "past_trip"
-                        else "outside_forecast_window"
+                        "past" if empty.availability == "past_trip" else "outside_forecast_window"
                     ),
                 )
             ]
@@ -87,11 +82,14 @@ class WeatherService:
         cached = self.entries.get(key)
         clock = time.monotonic()
         if cached and cached[0] > clock and not request.refresh:
+            cache_event("hit")
             self.entries.move_to_end(key)
             return cached[1].model_copy(deep=True, update={"cached": True})
+        cache_event("miss")
         if request.cache_only:
             return empty  # Tab navigation never creates a provider request or returns stale facts.
         if key in self.pending:
+            cache_event("coalesced")
             return (await asyncio.shield(self.pending[key])).model_copy(
                 deep=True, update={"cached": True}
             )
@@ -134,9 +132,7 @@ class WeatherService:
                 days = [
                     day
                     for day in days
-                    if max(request.start_date, today)
-                    <= day.date
-                    <= min(request.end_date, horizon)
+                    if max(request.start_date, today) <= day.date <= min(request.end_date, horizon)
                 ]
                 fetched = datetime.now(UTC)
                 result = WeatherForecast(
@@ -147,7 +143,9 @@ class WeatherService:
                     availability=(
                         "available"
                         if len(days) == (request.end_date - request.start_date).days + 1
-                        else "partially_available" if days else "unavailable"
+                        else "partially_available"
+                        if days
+                        else "unavailable"
                     ),
                 )
                 # Describe missing ranges without allocating one object per trip day.
@@ -172,9 +170,7 @@ class WeatherService:
                     for first, last, reason in sections:
                         if first <= last:
                             result.uncovered_ranges.append(
-                                CoverageGap(
-                                    start_date=first, end_date=last, reason=reason
-                                )
+                                CoverageGap(start_date=first, end_date=last, reason=reason)
                             )
                 self.entries[key] = (time.monotonic() + CACHE_TTL_SECONDS, result)
                 self.entries.move_to_end(key)
@@ -191,7 +187,5 @@ class WeatherService:
 
         task = asyncio.create_task(load())
         self.pending[key] = task
-        task.add_done_callback(
-            lambda done: None if done.cancelled() else done.exception()
-        )
+        task.add_done_callback(lambda done: None if done.cancelled() else done.exception())
         return (await asyncio.shield(task)).model_copy(deep=True)

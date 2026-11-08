@@ -53,7 +53,7 @@ export async function searchTripHotels(trip: TripRow, userId: string, refresh = 
       method: "POST", headers: { "Content-Type": "application/json", "X-Nomvira-Internal-Key": key },
       body: JSON.stringify({
         user_id: userId, destination_key: `${trip.destination_provider}:${trip.destination_provider_id}`,
-        destination_name: trip.destination_display_name || trip.destination_name,
+        destination_name: trip.destination_name,
         destination_country: trip.destination_country, destination_admin1: trip.destination_admin1, destination_timezone: trip.destination_timezone,
         latitude: trip.destination_latitude, longitude: trip.destination_longitude,
         check_in: trip.start_date, check_out: trip.end_date, travelers: trip.travelers_count,

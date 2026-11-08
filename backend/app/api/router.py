@@ -6,9 +6,10 @@ from app.api.v1.companion import router as companion_router
 from app.api.v1.destinations import router as destinations_router
 from app.api.v1.food import router as food_router
 from app.api.v1.itineraries import router as itineraries_router
+from app.api.v1.memory import router as memory_router
 from app.api.v1.places import router as places_router
-from app.api.v1.weather import router as weather_router
 from app.api.v1.routing import router as routing_router
+from app.api.v1.weather import router as weather_router
 
 router = APIRouter(prefix="/api/v1")
 router.include_router(destinations_router)
@@ -20,3 +21,4 @@ router.include_router(budget_router)
 router.include_router(weather_router)
 router.include_router(companion_router)
 router.include_router(routing_router)
+router.include_router(memory_router)

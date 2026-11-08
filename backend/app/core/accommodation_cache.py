@@ -4,6 +4,8 @@ import time
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 
+from app.core.observability import cache_event
+
 
 class AccommodationCache[T]:
     """Bounded process memory, coalesced loads and cancellation-safe waiters."""
@@ -16,9 +18,11 @@ class AccommodationCache[T]:
     def peek(self, key: tuple) -> T | None:
         entry = self.entries.get(key)
         if entry and entry[0] > time.monotonic():
+            cache_event("hit")
             self.entries.move_to_end(key)
             return copy.deepcopy(entry[1])
         self.entries.pop(key, None)
+        cache_event("miss")
         return None
 
     def remove(self, key: tuple) -> None:
@@ -29,6 +33,8 @@ class AccommodationCache[T]:
         if cached is not None or key in self.entries:
             return cached
         task = self.pending.get(key)
+        if task is not None:
+            cache_event("coalesced")
         if task is None:
 
             async def fill() -> T:
@@ -43,8 +49,6 @@ class AccommodationCache[T]:
                     self.pending.pop(key, None)
 
             task = asyncio.create_task(fill())
-            task.add_done_callback(
-                lambda done: None if done.cancelled() else done.exception()
-            )
+            task.add_done_callback(lambda done: None if done.cancelled() else done.exception())
             self.pending[key] = task
         return copy.deepcopy(await asyncio.shield(task))

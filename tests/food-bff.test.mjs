@@ -9,6 +9,12 @@ import { foodContext } from "../src/lib/food/context.ts";
 import { foodResults, foodTrip } from "./food-fixtures.mjs";
 
 const require = createRequire(import.meta.url), KEY = "test-internal-application-key-never-real", tripId = foodTrip.id, userId = foodTrip.owner_id;
+test("older food provider constraints produce a safe setup error", () => {
+  const { foodSelectionFailure } = load("src/lib/food/server.ts");
+  const error = foodSelectionFailure({ code: "23514", message: 'violates check constraint "trip_food_selections_provider_check"' });
+  assert.equal(error.code, "setup_required");
+  assert.doesNotMatch(error.message, /23514|provider_check/);
+});
 function load(file, adapters = {}) {
   const cache = new Map();
   function moduleAt(filename) {

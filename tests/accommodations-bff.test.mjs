@@ -76,6 +76,7 @@ test("hotel reads restore backend-cached results without searching providers", a
   t.mock.method(globalThis,"fetch",async (url,options) => {
     calls++; assert.equal(url,"http://backend.test:8000/api/v1/accommodations/search");
     const body=JSON.parse(options.body); assert.equal(body.user_id,userId); assert.equal(body.check_in,hotelTrip.start_date); assert.equal(body.check_out,hotelTrip.end_date);
+    assert.equal(body.destination_name,hotelTrip.destination_name);
     assert.equal(body.travelers,2); assert.equal(body.rooms,1); assert.equal(body.trip_budget,"2500"); assert.equal(body.destination_key,"open_meteo:1850147");
     assert.equal(options.headers["X-Nomvira-Internal-Key"],KEY); assert.equal("cookie" in options.headers,false); assert.equal("X-API-Key" in options.headers,false);
     if(body.cache_only && !backendCache) return Response.json({error:{code:"ACCOMMODATION_CACHE_MISS"}},{status:404});

@@ -49,8 +49,8 @@ export function DashboardEmptyState() {
   );
 }
 
-export function HomeDashboard({ data, upcomingTrip, upcomingError = false }: {
-  data: DashboardData; upcomingTrip: TripRow | null; upcomingError?: boolean;
+export function HomeDashboard({ data, upcomingTrip, upcomingError = false, recentError = false, sampleContent = false }: {
+  data: DashboardData; upcomingTrip: TripRow | null; upcomingError?: boolean; recentError?: boolean; sampleContent?: boolean;
 }) {
   return (
     <div className="min-w-0">
@@ -82,16 +82,16 @@ export function HomeDashboard({ data, upcomingTrip, upcomingError = false }: {
         ) : (
           <DashboardEmptyState />
         )}
-        <RecommendedDestinations destinations={data.recommendations} />
+        {data.recommendations.length > 0 && <RecommendedDestinations destinations={data.recommendations} />}
         <div className="grid gap-8 xl:grid-cols-[0.95fr_1.05fr] xl:gap-6">
           <NomviraInsightCard insight={data.insight} />
-          <RecentTrips trips={data.recentTrips} />
+          {recentError ? <SurfaceCard className="p-6" role="alert"><p className="text-sm">Recent trips couldn’t load.</p><Link href="/trips" className="mt-3 inline-flex min-h-11 items-center text-sm underline">Open My Trips</Link></SurfaceCard> : <RecentTrips trips={data.recentTrips} sampleContent={sampleContent} />}
         </div>
       </div>
-      <p className="type-meta mt-8 text-muted-foreground">
+      {sampleContent && <p className="type-meta mt-8 text-muted-foreground">
         Your upcoming trip uses your saved details. Recommendations, insights,
         and recent trip examples are sample content.
-      </p>
+      </p>}
     </div>
   );
 }

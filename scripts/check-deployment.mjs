@@ -24,7 +24,13 @@ export function deploymentErrors(env) {
   const internalKey = env.NOMVIRA_INTERNAL_API_KEY;
   if (!internalKey || internalKey.length < 32 || /\s/.test(internalKey) || template(internalKey)) errors.push("NOMVIRA_INTERNAL_API_KEY must be a private random value of at least 32 characters, matching FastAPI and the database.");
   for (const name of Object.keys(env)) {
-    if (name.startsWith("NEXT_PUBLIC_") && /INTERNAL|STAYAPI|GEOAPIFY|GEMINI|GOOGLE_API_KEY|SERVICE_ROLE|SECRET/i.test(name)) errors.push(`Remove ${name}: private keys must not use NEXT_PUBLIC_.`);
+    if (name.startsWith("NEXT_PUBLIC_") && /INTERNAL|STAYAPI|GEOAPIFY|GEMINI|GOOGLE_API_KEY|OPENROUTESERVICE|ROUTING_API_KEY|SERVICE_ROLE|SECRET/i.test(name)) errors.push(`Remove ${name}: private keys must not use NEXT_PUBLIC_.`);
+  }
+  if (env.NEXT_PUBLIC_MAP_STYLE_URL) {
+    try {
+      const map = new URL(env.NEXT_PUBLIC_MAP_STYLE_URL);
+      if (map.protocol !== "https:" || map.username || map.password || /key|token|secret/i.test(map.search) || template(map.href)) errors.push("NEXT_PUBLIC_MAP_STYLE_URL must be an HTTPS public style without private credentials.");
+    } catch { errors.push("NEXT_PUBLIC_MAP_STYLE_URL must be a valid HTTPS public style."); }
   }
   if (env.NOMVIRA_API_URL && env.NOMVIRA_API_URL === env.NEXT_PUBLIC_SITE_URL) errors.push("NOMVIRA_API_URL must point to FastAPI on Render, not the Next.js application.");
   return errors;

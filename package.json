@@ -19,6 +19,8 @@
     "test:budget": "node --experimental-strip-types --test tests/budget.test.mjs tests/budget-bff.test.mjs tests/budget-db.test.mjs",
     "test:weather": "node --experimental-strip-types --test tests/weather.test.mjs tests/weather-bff.test.mjs tests/weather-db.test.mjs",
     "test:companion": "node --experimental-strip-types --test tests/companion.test.mjs tests/companion-bff.test.mjs tests/companion-db.test.mjs",
+    "test:memory": "node --experimental-strip-types --test tests/memory-bff.test.mjs tests/memory-db.test.mjs",
+    "test:sharing": "node --experimental-strip-types --test tests/export-sharing.test.mjs tests/sharing-bff.test.mjs tests/sharing-db.test.mjs",
     "test:auth": "node --experimental-strip-types --test tests/auth.test.mjs tests/auth-network.test.mjs tests/supabase-connector.test.mjs",
     "test:trips": "node --experimental-strip-types --test tests/trips.test.mjs",
     "test:accommodations": "node --experimental-strip-types --test tests/accommodations.test.mjs tests/accommodations-db.test.mjs tests/accommodations-bff.test.mjs",
@@ -49,6 +51,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.12",
+    "@electric-sql/pglite-pgvector": "^0.0.16",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "26.6.5",
     "@types/react": "19.3.0",

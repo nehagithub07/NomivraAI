@@ -156,3 +156,17 @@
     transition-timing-function: ease-out;
   }
 }
+
+@media print {
+  @page { size: A4; margin: 14mm; }
+  html, body { background: white !important; color: #171717 !important; }
+  .app-shell > aside, .app-shell > nav, .app-shell > a,
+  .app-shell-body > header, .page-header, .export-controls { display: none !important; }
+  .app-shell, .app-shell-body, main { min-height: 0 !important; padding: 0 !important; margin: 0 !important; }
+  #main-content > div { padding: 0 !important; max-width: none !important; }
+  .export-document { border: 0 !important; border-radius: 0 !important; padding: 0 !important; box-shadow: none !important; }
+  .export-document h2, .export-document h3 { break-after: avoid; }
+  .export-document li, .export-document dl > div { break-inside: avoid; }
+  .export-document a { color: inherit !important; text-decoration: underline; }
+  .export-document p, .export-document li { orphans: 3; widows: 3; }
+}

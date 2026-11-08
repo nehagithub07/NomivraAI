@@ -8,20 +8,21 @@ from app.api.v1.health import router as health_router
 from app.core.config import Settings, get_settings
 from app.core.errors import register_error_handlers
 from app.core.logging import RequestLoggingMiddleware, configure_logging
+from app.core.observability import ObservedAsyncClient, RuntimeMonitor
 from app.core.rate_limit import ProviderLimits
 from app.core.search_cache import DestinationSearchCache
+from app.providers.routing.openrouteservice import (
+    OpenRouteServiceProvider,
+)
 from app.providers.weather.open_meteo import OpenMeteoWeatherProvider
 from app.services.companion_service import CompanionService
 from app.services.food_recommendation_service import FoodRecommendationService
 from app.services.hotel_recommendation_service import HotelRecommendationService
 from app.services.itinerary_generation_service import ItineraryGenerationService
+from app.services.memory_embeddings import MemoryEmbeddings
+from app.services.routing_service import RoutingService
 from app.services.weather_adaptation_service import WeatherAdaptationService
 from app.services.weather_service import WeatherService
-from app.providers.routing.openrouteservice import (
-    OpenRouteServiceProvider,
-)
-
-from app.services.routing_service import RoutingService
 
 
 def create_app(
@@ -30,7 +31,8 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         configure_logging()
-        async with httpx.AsyncClient(
+        async with ObservedAsyncClient(
+            monitor=app.state.monitor,
             headers={"User-Agent": app.state.settings.provider_user_agent},
             timeout=httpx.Timeout(10, connect=3, pool=3),
             limits=httpx.Limits(
@@ -40,18 +42,15 @@ def create_app(
             follow_redirects=False,
         ) as client:
             app.state.http = client
-            app.state.accommodations = HotelRecommendationService(
-                app.state.settings, client
-            )
+            app.state.memory_embeddings = MemoryEmbeddings(app.state.settings)
+            app.state.accommodations = HotelRecommendationService(app.state.settings, client)
             app.state.food = FoodRecommendationService(app.state.settings, client)
             app.state.itineraries = ItineraryGenerationService(app.state.settings)
             app.state.companion = CompanionService(
                 app.state.settings, app.state.itineraries.provider
             )
             app.state.weather = WeatherService(
-                OpenMeteoWeatherProvider(
-                    client, str(app.state.settings.open_meteo_forecast_url)
-                )
+                OpenMeteoWeatherProvider(client, str(app.state.settings.open_meteo_forecast_url))
             )
             app.state.weather_adaptation = WeatherAdaptationService(
                 app.state.weather, app.state.itineraries
@@ -68,6 +67,7 @@ def create_app(
 
     app = FastAPI(title="Nomvira API", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings or get_settings()
+    app.state.monitor = RuntimeMonitor(app.state.settings)
     app.state.limits = ProviderLimits()
     app.state.search_cache = DestinationSearchCache()
     app.add_middleware(RequestLoggingMiddleware)

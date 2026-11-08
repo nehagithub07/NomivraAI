@@ -4,11 +4,11 @@ services:
     name: nomvira-api
     runtime: python
     rootDir: backend
-    plan: free
+    plan: starter
     numInstances: 1
     buildCommand: pip install -r requirements.txt
-    startCommand: python check_deployment.py && exec python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
-    healthCheckPath: /health
+    startCommand: python check_deployment.py && exec python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --no-access-log
+    healthCheckPath: /ready
     envVars:
       - key: APP_ENV
         value: production
@@ -40,6 +40,8 @@ services:
         value: gemini
       - key: GEMINI_MODEL
         value: gemini-3.8-flash
+      - key: GEMINI_ITINERARY_MODEL
+        value: gemini-3.6-flash
       - key: GEMINI_API_KEY
         sync: false
       - key: ROUTING_PROVIDER

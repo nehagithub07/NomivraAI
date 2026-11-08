@@ -8,6 +8,7 @@ import { getFoodSelections, searchTripFood } from "@/lib/food/server";
 import { getPersistedPlaces } from "@/lib/destinations/persistence";
 import { getBudgetSummary } from "@/lib/budget/server";
 import { getTripWeather } from "@/lib/weather/server";
+import { retrieveTravelMemories } from "@/lib/memory/server";
 
 export async function hydrateCompanionRecommendations(trip: TripWithInterests) {
   // Cache-only service reads survive Vercel route isolation. Neither cache miss
@@ -19,12 +20,14 @@ export async function hydrateCompanionRecommendations(trip: TripWithInterests) {
 }
 export async function buildCompanionContext(db: SupabaseClient<Database>, trip: TripWithInterests) {
   await hydrateCompanionRecommendations(trip);
-  const [itinerary, stay, food, places, budget, weather] = await Promise.all([
+  const [itinerary, stay, food, places, budget, weather, travel_memories] = await Promise.all([
     getItinerary(db, trip).catch(() => null), getStaySelection(db, trip.id).catch(() => null),
     getFoodSelections(db, trip.id).catch(() => []), getPersistedPlaces(db, trip.id).catch(() => []),
     getBudgetSummary(db, trip).catch(() => null), getTripWeather(db, trip).catch(() => null),
+    retrieveTravelMemories(db, trip.owner_id, trip),
   ]);
   return {
+    travel_memories,
     destination: trip.destination_name, country: trip.destination_country, timezone: trip.destination_timezone,
     start_date: trip.start_date, end_date: trip.end_date, travelers: trip.travelers_count,
     currency: trip.currency, budget_style: trip.budget_style, travel_pace: trip.travel_pace,

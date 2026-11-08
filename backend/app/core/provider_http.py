@@ -170,15 +170,7 @@ async def request_json(
 
     if response.status_code == 400:
         if provider == "PLACES":
-            safe_body = response.text[:500].replace(
-                "\n",
-                " ",
-            )
-
-            logger.warning(
-                "places_provider_failure status=400 body=%s",
-                safe_body,
-            )
+            logger.warning("places_provider_failure status=400")
 
         raise AppError(
             f"{provider}_PROVIDER_INVALID_REQUEST",
@@ -188,16 +180,7 @@ async def request_json(
 
     if response.status_code >= 400:
         if provider == "PLACES":
-            safe_body = response.text[:500].replace(
-                "\n",
-                " ",
-            )
-
-            logger.warning(
-                "places_provider_failure status=%d body=%s",
-                response.status_code,
-                safe_body,
-            )
+            logger.warning("places_provider_failure status=%d", response.status_code)
 
         raise AppError(
             f"{provider}_PROVIDER_UNAVAILABLE",
@@ -210,10 +193,7 @@ async def request_json(
 
         if not isinstance(data, dict) or data.get("error") or data.get("remark"):
             if provider == "PLACES":
-                logger.warning(
-                    "places_provider_failure reason=provider_remark remark=%s",
-                    str(data.get("remark") or data.get("error"))[:500],
-                )
+                logger.warning("places_provider_failure reason=provider_remark")
 
             raise ValueError
 

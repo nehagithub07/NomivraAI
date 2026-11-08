@@ -1,9 +1,12 @@
+from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
 from pydantic import (
     AnyHttpUrl,
+    BaseModel,
+    ConfigDict,
     Field,
     SecretStr,
     model_validator,
@@ -12,6 +15,15 @@ from pydantic_settings import (
     BaseSettings,
     SettingsConfigDict,
 )
+
+
+class TokenPricing(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    input_per_million: Decimal = Field(ge=0, le=100000, allow_inf_nan=False)
+    output_per_million: Decimal = Field(ge=0, le=100000, allow_inf_nan=False)
+    cached_input_per_million: Decimal | None = Field(
+        default=None, ge=0, le=100000, allow_inf_nan=False
+    )
 
 
 class Settings(BaseSettings):
@@ -157,6 +169,10 @@ class Settings(BaseSettings):
     ] = "gemini"
 
     gemini_api_key: SecretStr = SecretStr("")
+    gemini_max_requests_per_minute: int = Field(default=30, ge=1, le=1000)
+    gemini_daily_token_limit: int = Field(default=1_000_000, ge=1, le=1_000_000_000)
+    provider_max_requests_per_minute: int = Field(default=120, ge=1, le=10000)
+    gemini_pricing_json: dict[str, TokenPricing] = Field(default_factory=dict, max_length=8)
 
     # Used by the AI Travel Companion.
     gemini_model: str = Field(
@@ -294,11 +310,9 @@ class Settings(BaseSettings):
     ) -> None:
         if url.scheme != "https" or url.username or url.password or url.query or url.fragment:
             raise ValueError(
-                (
-                    f"{provider_name} requires HTTPS "
-                    "without embedded credentials, "
-                    "query parameters, or fragments."
-                )
+                f"{provider_name} requires HTTPS "
+                "without embedded credentials, "
+                "query parameters, or fragments."
             )
 
 

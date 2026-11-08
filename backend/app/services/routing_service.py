@@ -1,6 +1,7 @@
 import json
 import time
 
+from app.core.observability import cache_event
 from app.providers.routing.base import RoutingProvider
 from app.schemas.routing import (
     MatrixRequest,
@@ -78,23 +79,17 @@ class RoutingService:
         )
 
         if cached:
+            cache_event("hit")
             return cached.model_copy(update={"cached": True})
 
+        cache_event("miss")
         result = await self.provider.route(request)
 
-        limit = (
-            WALKING_LONG_TRANSFER
-            if request.mode == "walking"
-            else DRIVING_LONG_TRANSFER
-        )
+        limit = WALKING_LONG_TRANSFER if request.mode == "walking" else DRIVING_LONG_TRANSFER
 
         segments = [
             segment.model_copy(
-                update={
-                    "warning": (
-                        "long_transfer" if segment.duration_seconds > limit else None
-                    )
-                }
+                update={"warning": ("long_transfer" if segment.duration_seconds > limit else None)}
             )
             for segment in result.segments
         ]
@@ -126,6 +121,7 @@ class RoutingService:
         )
 
         if cached:
+            cache_event("hit")
             return cached.model_copy(update={"cached": True})
 
         result = await self.provider.matrix(request)

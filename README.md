@@ -1,5 +1,19 @@
 # NomivraAI client  
 
+**Step 15: Production Polish, Export, Sharing & Deployment** adds
+`/trips/[tripId]/export` with downloadable PDF, print layout and explicitly
+approved, expiring read-only sharing links. Links can be copied after reload,
+replaced or revoked. Apply `20261106001300_trip_sharing.sql` after Step 14;
+`npm run db:prepare` includes it. See the [deployment and acceptance guide](docs/deployment/deployment.md#export-sharing-and-release-checks).
+Run `npm run test:sharing` for export/privacy, authenticated BFF and PostgreSQL
+sharing checks. Production uses saved dashboard data; sample journeys require a
+development preview. No new production dependencies or provider keys are needed.
+
+**Step 14: Personalization, Memory & RAG** adds approved travel defaults and
+consent-based memory controls at `/settings`, with private pgvector retrieval for
+itinerary and Companion context. Apply `20261106001200_personalization_memory.sql`
+before enabling it. See the [Step 14 setup, privacy and validation guide](docs/history/step-14.md).
+
 **Step 12: AI Travel Companion** is available per owned trip at
 `/trips/[tripId]/companion`. It extends the existing Gemini provider with manual,
 validated function calling, source cards, private chat history, and confirmation

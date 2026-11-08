@@ -356,8 +356,7 @@ class GoogleMapsFoodEnricher:
         }
 
         logger.info(
-            "google_food_search_requested destination=%s",
-            destination_name,
+            "google_food_search_requested",
         )
 
         try:
@@ -439,8 +438,7 @@ class GoogleMapsFoodEnricher:
         # result for page 1.
         if response.status_code == 404:
             logger.info(
-                "google_food_search_empty destination=%s",
-                destination_name,
+                "google_food_search_empty",
             )
 
             return []
@@ -450,12 +448,8 @@ class GoogleMapsFoodEnricher:
             422,
         ):
             logger.warning(
-                "google_food_search_invalid_request status=%d body=%s",
+                "google_food_search_invalid_request status=%d",
                 response.status_code,
-                response.text[:400].replace(
-                    "\n",
-                    " ",
-                ),
             )
 
             raise AppError(
@@ -482,12 +476,8 @@ class GoogleMapsFoodEnricher:
 
         if response.status_code >= 400:
             logger.warning(
-                "google_food_search_failure status=%d body=%s",
+                "google_food_search_failure status=%d",
                 response.status_code,
-                response.text[:400].replace(
-                    "\n",
-                    " ",
-                ),
             )
 
             raise AppError(
@@ -567,8 +557,7 @@ class GoogleMapsFoodEnricher:
             output.append(item)
 
         logger.info(
-            "google_food_search_completed destination=%s results=%d",
-            destination_name,
+            "google_food_search_completed results=%d",
             len(output),
         )
 

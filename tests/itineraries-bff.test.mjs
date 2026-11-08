@@ -25,7 +25,7 @@ function load(file, adapters = {}) {
       if (name === "@/lib/accommodations/server") return { getStaySelection: async () => null, getCachedHotels: () => null };
       if (name === "@/lib/food/server") return { getFoodSelections: async () => adapters.food ?? [], getCachedFood: () => adapters.cachedFood ?? null };
       if (name.startsWith("@/")) return moduleAt(path.resolve("src", `${name.slice(2)}.ts`));
-      if (name.startsWith(".")) return moduleAt(path.resolve(path.dirname(filename), `${name}.ts`));
+      if (name.startsWith(".")) return moduleAt(path.resolve(path.dirname(filename), name.endsWith(".ts") ? name : `${name}.ts`));
       return require(name);
     }
     new Function("require", "module", "exports", source)(localRequire, loaded, loaded.exports);

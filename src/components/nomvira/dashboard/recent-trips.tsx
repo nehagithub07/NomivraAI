@@ -20,9 +20,9 @@ export function RecentTripCard({ trip }: { trip: RecentTrip }) {
         </span>
         <div className="min-w-0 flex-1">
           <h3 className="type-card text-base">
-            {trip.destination}
+            {/^[a-f0-9-]{36}$/i.test(trip.id) ? <Link href={`/trips/${trip.id}`} className="underline-offset-4 hover:underline">{trip.destination}</Link> : trip.destination}
             <span className="font-normal text-muted-foreground">
-              , {trip.country}
+              {trip.country ? `, ${trip.country}` : ""}
             </span>
           </h3>
           <p className="type-meta mt-1 text-muted-foreground">
@@ -42,13 +42,13 @@ export function RecentTripCard({ trip }: { trip: RecentTrip }) {
   );
 }
 
-export function RecentTrips({ trips }: { trips: RecentTrip[] }) {
+export function RecentTrips({ trips, sampleContent = false }: { trips: RecentTrip[]; sampleContent?: boolean }) {
   return (
     <section aria-labelledby="recent-trips-title" className="min-w-0">
       <SectionHeading
         id="recent-trips-title"
         title="Recent trips"
-        description="Sample journeys for inspiration."
+        description={sampleContent ? "Sample journeys for inspiration." : "Your saved completed journeys."}
         trailing={
           <Link
             href="/trips"

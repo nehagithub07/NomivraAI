@@ -103,6 +103,18 @@ export type CreateTripArguments = {
 export type Database = {
   public: {
     Tables: {
+      trip_shares: {
+        Row: { trip_id: string; owner_id: string; revision: string; request_id: string | null; token_hash: string | null; token_cipher: string | null; snapshot: unknown; options: unknown; expires_at: string | null; created_at: string };
+        Insert: never; Update: never; Relationships: [];
+      };
+      travel_preferences: {
+        Row: { user_id: string; preferences: import("@/lib/memory/validation").Preferences; memory_enabled: boolean; updated_at: string };
+        Insert: never; Update: never; Relationships: [];
+      };
+      travel_memories: {
+        Row: import("@/lib/memory/validation").MemoryRecord & { user_id: string; embedding: string | null; embedding_model: string | null };
+        Insert: never; Update: never; Relationships: [];
+      };
       companion_conversations: { Row: { id: string; trip_id: string; user_id: string; active_request: string | null; active_until: string | null; created_at: string; updated_at: string }; Insert: never; Update: never; Relationships: [] };
       companion_messages: { Row: { id: string; conversation_id: string; role: "user" | "assistant"; content: string; reply_to: string | null; metadata: Record<string, unknown>; created_at: string }; Insert: never; Update: never; Relationships: [] };
       companion_pending_actions: { Row: { id: string; trip_id: string; user_id: string; tool_name: string; arguments: Record<string, unknown>; snapshot: Record<string, unknown>; preview: Record<string, unknown>; status: string; result: Record<string, unknown> | null; expires_at: string; created_at: string; confirmed_at: string | null; completed_at: string | null }; Insert: never; Update: never; Relationships: [] };
@@ -146,6 +158,15 @@ export type Database = {
     };
     Views: { [_ in never]: never };
     Functions: {
+      create_trip_share: { Args: { p_payload: string; p_signature: string; p_document: string }; Returns: unknown };
+      revoke_trip_share: { Args: { p_trip_id: string }; Returns: undefined };
+      get_shared_trip: { Args: { p_token: string }; Returns: unknown };
+      update_travel_preferences: { Args: { p_preferences: import("@/lib/memory/validation").Preferences; p_enabled: boolean }; Returns: undefined };
+      save_travel_memory: { Args: { p_kind: string; p_preferences: import("@/lib/memory/validation").Preferences; p_feedback: string; p_trip_id?: string }; Returns: string };
+      delete_travel_memory: { Args: { p_id?: string; p_reset?: boolean }; Returns: undefined };
+      index_travel_memory: { Args: { p_id: string; p_content: string; p_embedding: string }; Returns: undefined };
+      claim_travel_memory_index: { Args: { p_id?: string }; Returns: unknown };
+      match_travel_memories: { Args: { p_embedding: string; p_limit: number }; Returns: unknown };
       begin_companion_message: { Args: { p_trip_id: string; p_request_id: string; p_content: string }; Returns: unknown };
       finish_companion_message: { Args: { p_payload: string; p_signature: string; p_document: string }; Returns: string };
       prepare_companion_action: { Args: { p_payload: string; p_signature: string; p_document: string }; Returns: string };

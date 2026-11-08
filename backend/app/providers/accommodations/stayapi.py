@@ -858,13 +858,9 @@ class StayApiAccommodationProvider(AccommodationProvider):
             422,
         }:
             logger.warning(
-                "stayapi_invalid_request endpoint=%s status=%s body=%s",
+                "stayapi_invalid_request endpoint=%s status=%s",
                 endpoint,
                 response.status_code,
-                response.text[:500].replace(
-                    "\n",
-                    " ",
-                ),
             )
 
             raise AppError(
@@ -878,13 +874,9 @@ class StayApiAccommodationProvider(AccommodationProvider):
 
         if not response.is_success:
             logger.warning(
-                "stayapi_failure endpoint=%s status=%s body=%s",
+                "stayapi_failure endpoint=%s status=%s",
                 endpoint,
                 response.status_code,
-                response.text[:500].replace(
-                    "\n",
-                    " ",
-                ),
             )
 
             raise AppError(

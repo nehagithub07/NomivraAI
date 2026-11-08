@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.food import Diet, FoodCategory
+from app.schemas.memory import RetrievedMemory
 from app.schemas.place import PlaceCategory
 
 Interest = Literal[
@@ -85,6 +86,7 @@ class PlanningHotel(StrictModel):
 
 
 class PlanningInput(StrictModel):
+    travel_memories: list[RetrievedMemory] = Field(default_factory=list, max_length=5)
     trip_id: UUID
     destination_name: str = Field(min_length=1, max_length=160)
     country: str | None = Field(default=None, max_length=160)

@@ -30,7 +30,7 @@ test("deployment rejects localhost, insecure URLs, credentials and callback path
 });
 
 test("deployment rejects exposed provider keys and service-role keys without printing their values", () => {
-  for (const name of ["NEXT_PUBLIC_NOMVIRA_INTERNAL_API_KEY", "NEXT_PUBLIC_STAYAPI_API_KEY", "NEXT_PUBLIC_GEOAPIFY_API_KEY", "NEXT_PUBLIC_GEMINI_API_KEY", "NEXT_PUBLIC_GOOGLE_API_KEY", "NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY", "NEXT_PUBLIC_SUPABASE_SECRET_KEY"]) {
+  for (const name of ["NEXT_PUBLIC_NOMVIRA_INTERNAL_API_KEY", "NEXT_PUBLIC_STAYAPI_API_KEY", "NEXT_PUBLIC_GEOAPIFY_API_KEY", "NEXT_PUBLIC_GEMINI_API_KEY", "NEXT_PUBLIC_GOOGLE_API_KEY", "NEXT_PUBLIC_OPENROUTESERVICE_API_KEY", "NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY", "NEXT_PUBLIC_SUPABASE_SECRET_KEY"]) {
     const errors = deploymentErrors({ ...configured, [name]: "PRIVATE_DO_NOT_LOG" });
     assert.ok(errors.some(error => error.includes(name)));
     assert.ok(!errors.join(" ").includes("PRIVATE_DO_NOT_LOG"));
@@ -40,5 +40,14 @@ test("deployment rejects exposed provider keys and service-role keys without pri
     const errors = deploymentErrors({ ...configured, NOMVIRA_INTERNAL_API_KEY: value });
     assert.ok(errors.length);
     assert.ok(!errors.join(" ").includes(value));
+  }
+});
+
+test("public map styles cannot carry private credentials or insecure URLs", () => {
+  assert.deepEqual(deploymentErrors({ ...configured, NEXT_PUBLIC_MAP_STYLE_URL: "https://tiles.openfreemap.org/styles/liberty" }), []);
+  for (const url of ["http://map.test/style", "https://PRIVATE@map.test/style", "https://map.test/style?key=PRIVATE", "invalid"]) {
+    const errors = deploymentErrors({ ...configured, NEXT_PUBLIC_MAP_STYLE_URL: url });
+    assert.ok(errors.some(error => error.includes("NEXT_PUBLIC_MAP_STYLE_URL")));
+    assert.doesNotMatch(errors.join(" "), /PRIVATE@|key=PRIVATE/);
   }
 });

@@ -48,9 +48,14 @@ def deployment_errors(settings: Settings) -> list[str]:
         "open_meteo_geocoding_url",
         "open_meteo_forecast_url",
         "overpass_api_url",
+        "overpass_fallback_url",
+        "overpass_last_resort_url",
         "stayapi_base_url",
         "geoapify_base_url",
+        "openrouteservice_base_url",
     ):
+        if getattr(settings, name) is None:
+            continue
         url = urlsplit(str(getattr(settings, name)))
         if (
             url.scheme != "https"

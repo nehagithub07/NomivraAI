@@ -23,7 +23,7 @@ function load(file, adapters = {}) {
       if (name === "@/lib/supabase/server") return { createClient: async () => adapters.db };
       if (name === "@/lib/accommodations/server") return { getStaySelection: async () => adapters.selection ?? null, getCachedHotels: () => adapters.hotels ?? null };
       if (name.startsWith("@/")) return moduleAt(path.resolve("src", `${name.slice(2)}.ts`));
-      if (name.startsWith(".")) return moduleAt(path.resolve(path.dirname(filename), `${name}.ts`));
+      if (name.startsWith(".")) return moduleAt(path.resolve(path.dirname(filename), name.endsWith(".ts") ? name : `${name}.ts`));
       return require(name);
     }
     new Function("require", "module", "exports", code)(localRequire, loaded, loaded.exports);
