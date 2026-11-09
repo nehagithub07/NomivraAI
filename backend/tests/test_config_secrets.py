@@ -4,9 +4,7 @@ from pathlib import Path
 from app.core.config import Settings
 
 
-def test_secret_defaults_are_empty_and_secrets_load_from_private_environment(
-    tmp_path, monkeypatch
-):
+def test_secret_defaults_are_empty_and_secrets_load_from_private_environment(tmp_path, monkeypatch):
     fields = [
         "nomvira_internal_api_key",
         "stayapi_api_key",
@@ -37,14 +35,16 @@ def test_environment_examples_have_blank_private_keys_and_public_placeholders():
                 continue
             name, value = match.groups()
             value = value.strip("\"'")
+            if name == "GEMINI_DAILY_TOKEN_LIMIT":
+                # This is a numeric usage budget, not an authentication token.
+                assert value.isdecimal(), f"{relative}:{number}: usage budget must be numeric"
+                continue
             private = not name.startswith("NEXT_PUBLIC_") and re.search(
                 r"KEY|SECRET|TOKEN|PASSWORD", name
             )
             if private and value:
                 # Explicit failure messages must never echo the credential.
-                raise AssertionError(
-                    f"{relative}:{number}: {name} must be blank in templates"
-                )
+                raise AssertionError(f"{relative}:{number}: {name} must be blank in templates")
             if name == "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" and value:
                 if not re.search(r"YOUR_|REPLACE_|EXAMPLE|PLACEHOLDER", value, re.I):
                     raise AssertionError(

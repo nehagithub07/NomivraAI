@@ -9,6 +9,7 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
+from app.core import observability
 from app.core.accommodation_cache import AccommodationCache
 from app.core.config import Settings
 from app.core.errors import AppError
@@ -205,3 +206,55 @@ def test_pricing_and_usage_configuration_reject_invalid_values():
     ]:
         with pytest.raises(ValidationError):
             settings(**change)
+
+
+def test_total_only_usage_cannot_be_priced_as_zero():
+    monitor = RuntimeMonitor(
+        settings(
+            gemini_pricing_json={"test": {"input_per_million": "1", "output_per_million": "2"}}
+        )
+    )
+    monitor.models["test"]["requests"] = 1
+    monitor.model_usage("test", SimpleNamespace(total_token_count=12))
+    result = monitor.snapshot()
+    assert result["daily_observed_tokens"] == 12
+    assert result["models"]["test"]["estimated_cost_usd"] is None
+    assert result["models"]["test"]["cost_incomplete"]
+
+
+def test_daily_limit_retry_budget_and_utc_reset(monkeypatch):
+    now = [20000 * 86400 + 3600]
+    monkeypatch.setattr(observability.time, "time", lambda: now[0])
+    monitor = RuntimeMonitor(settings(gemini_daily_token_limit=10))
+    monitor.daily_tokens = 10
+    with pytest.raises(AppError) as limited:
+        monitor.reserve_model("test")
+    assert limited.value.status_code == 429
+    assert limited.value.retry_after_seconds == 82801
+    now[0] += 86400
+    monitor.reserve_model("test")
+    assert monitor.daily_tokens == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("timeout", [False, True])
+async def test_model_failure_status_and_timeouts_exclude_provider_error_payloads(timeout, caplog):
+    class ProviderError(Exception):
+        code = 503
+
+    monitor = RuntimeMonitor(settings())
+    token = current_monitor.set(monitor)
+    caplog.set_level(logging.INFO, logger="nomvira.metrics")
+
+    async def generate(**kwargs):
+        raise TimeoutError("NEVER_LOG") if timeout else ProviderError("NEVER_LOG")
+
+    try:
+        with pytest.raises((TimeoutError, ProviderError)):
+            await model_request(generate, model="test", contents="NEVER_LOG")
+    finally:
+        current_monitor.reset(token)
+    counts = monitor.snapshot()["providers"]["gemini"]
+    assert counts["failures"] == 1 and counts["timeouts"] == int(timeout)
+    assert counts["last_http_status"] == (None if timeout else 503)
+    assert "NEVER_LOG" not in caplog.text

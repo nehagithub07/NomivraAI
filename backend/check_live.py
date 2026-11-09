@@ -393,9 +393,14 @@ def main():
             if sys.stdin.isatty()
             else sys.stdin.readline()
         )
-        account = json.loads(raw)
-        if set(account) != {"email", "password"}:
-            parser.error("Expected email and password fields")
+        try:
+            account = json.loads(raw)
+            if not isinstance(account, dict) or set(account) != {"email", "password"}:
+                raise ValueError
+            if any(not isinstance(v, str) or not v or len(v) > 1024 for v in account.values()):
+                raise ValueError
+        except (ValueError, TypeError):
+            parser.error("Expected nonempty email and password fields")
     try:
         results = asyncio.run(
             run_checks(

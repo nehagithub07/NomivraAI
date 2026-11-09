@@ -1,5 +1,8 @@
 # Deploy NomviraAI with Vercel and Render
 
+Release status is **BLOCKED**; see [Steps 16–17 verification](../testing/testing.md).
+This guide does not certify a hosted deployment.
+
 Step 15 adds Export & Share at `/trips/[tripId]/export` and public read-only
 snapshots at `/share/[token]`. Apply all migrations in order, including Step 14's
 `20261106001200_personalization_memory.sql` and Step 15's
@@ -310,3 +313,110 @@ provider fetch. Use Load/Refresh forecast explicitly. Forecast failure leaves th
 trip, itinerary and budget available. Follow [manual weather verification and
 limits](../features/weather-intelligence.md#manual-verification-and-limits) before
 claiming hosted acceptance.
+
+## Operations and recovery (Steps 16–17)
+
+### Health and observability
+
+Render probes `/ready`; `/health` provides liveness. Both avoid provider calls.
+Readiness checks initialized services, not database migrations or upstream health.
+`/api/v1/diagnostics` requires the private `X-Nomvira-Internal-Key` header: call
+only from a trusted operator environment, never browser code. Configuration
+booleans are not availability claims; `database_schema_verified` stays false.
+
+Backend JSON logs include generated request IDs, coarse features, status and
+elapsed milliseconds. Provider/model events and diagnostics count requests,
+errors, timeouts, latency, cache hits/misses/coalescing and observed Gemini tokens.
+They exclude request bodies, prompts, conversations, user identifiers, credentials
+and raw exceptions. Keep access logging disabled as configured; sharing URLs
+are bearer credentials. Review error rates after releases without billable probes.
+
+Metrics cover backend calls, not browser map tiles or every Next.js/Supabase
+request. Counters are bounded, process-local and reset at restart. An unobserved
+provider is not a successful availability check.
+
+### Usage and cost controls
+
+| Backend variable | Default / meaning |
+| --- | --- |
+| `GEMINI_MAX_REQUESTS_PER_MINUTE` | `30`, includes fallback attempts and embeddings |
+| `GEMINI_DAILY_TOKEN_LIMIT` | `1000000`, observed tokens since UTC midnight |
+| `PROVIDER_MAX_REQUESTS_PER_MINUTE` | `120` per provider across users/features |
+| `GEMINI_PRICING_JSON` | `{}`, cost unavailable until current token prices are supplied |
+
+Pricing is keyed by configured model name: `input_per_million`,
+`output_per_million`, optional `cached_input_per_million`, in USD. No price is
+hardcoded. Cached prompt tokens are counted once; thinking tokens join output.
+Missing pricing/token breakdowns leave estimates unavailable or incomplete.
+Estimates exclude unreported usage, tool fees, taxes and billing adjustments;
+provider invoices are authoritative.
+
+These are single-process safeguards, not distributed billing caps. In-flight
+requests may overshoot the observed-token threshold; failed calls may have
+unreported usage. Restart resets usage. Keep one worker/instance and configure
+provider-side budgets/alerts before launch. Local 429s carry `Retry-After`; daily
+limits last until UTC midnight. Existing user/action guards remain in place.
+Do not automatically retry generations or regenerate on export/render.
+
+### Deployment and rollback
+
+1. Run both deployment validators against intended production configuration.
+   Set HTTPS Vercel/Render origins, `APP_ENV=production`, matching private signing
+   keys and live-provider/demo guards. Verify runtime durations/connectivity.
+2. Before live SQL, match the project reference/origin, inspect migration history,
+   existing objects/constraints/grants/RLS, and confirm a restorable backup/PITR
+   point or validated dump with timestamp and recovery procedure. App login and
+   publishable keys establish neither admin access nor recoverability.
+3. Apply only compatible pending migrations in dependency order. Companion
+   `20261030000900_ai_companion.sql`, Memory/RAG
+   `20261106001200_personalization_memory.sql` and Sharing
+   `20261106001300_trip_sharing.sql` remain unverified live. Review rated-food
+   `20261105001100_rated_food_provider.sql` separately for Google Maps selection
+   support. Do not blindly replay create-table migrations or run database resets.
+   Stop on destructive operations, conflicts or unavailable recovery. No live
+   schema change was performed under the current conditional authorization.
+4. After separately authorized deployment, check health/diagnostics and the hosted
+   journey, second-account ownership, consent/deletion/retrieval, sharing revocation
+   and mobile/PDF output. Local builds and configuration flags are insufficient.
+5. Roll back code to the last verified artifact and compatible environment while
+   preserving additive database objects and user data. Never drop tables to reverse
+   migrations. Pause writes and obtain explicit approval before a rehearsed restore.
+
+### Incident handling and retention
+
+Correlate safe request IDs, feature failures, upstream status and latency before
+retrying. Never paste provider bodies, tokens or user content into incident reports.
+Preserve saved trips and allow existing data/export reads.
+
+| Symptom | Action |
+| --- | --- |
+| StayAPI HTTP 402 | Investigate account access/billing; avoid retry loops and fixtures |
+| HTTP 429 / local usage limit | Respect cooldown; review quota before raising limits |
+| Gemini HTTP 503 | Keep saved itinerary; Companion has bounded model failover; retry deliberately after recovery |
+| Overpass timeout / HTTP 406 | Check network/upstream availability; Geoapify-first real OSM discovery shares a 40-second budget |
+| Companion/Memory/Sharing setup errors | Inspect migrations/privileges; never bypass RLS |
+| Missing route | Check saved itinerary and ORS; keep provider coordinates/direct map links |
+
+After recovery, run one bounded affected-feature probe and verify saved trips and
+deterministic totals. The opt-in smoke scripts consume real provider quota:
+
+```sh
+cd backend
+python check_live.py --live --providers open_meteo_weather,places_application_failover
+python check_live.py --live --ai --providers companion_application,gemini_embedding
+python check_journey.py --create-test-trip --web-origin http://localhost:3116
+```
+
+Point the local production frontend at the local backend first. The journey reads
+account JSON through hidden terminal input and creates/deletes one new trip; it
+never deletes preexisting trips. No probe deploys or migrates. Never put test
+account credentials in deployed environment variables.
+
+Memories/preferences and Companion history persist until explicitly deleted or
+the owning account/trip is removed, according to table relationships. Deleting a
+memory removes its embedding; opt-out prevents retrieval. Sharing revocation
+clears the token/snapshot and expiry blocks access. Downloaded copies cannot be
+recalled. Process caches expire/reset separately. Configure access and retention
+for Supabase backups and Render/Vercel logs before launch; disclose backup
+retention in the privacy policy. Before reopening traffic after a restore,
+reconcile deletion/revocation requests so restored data does not undo them.

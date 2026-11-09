@@ -1,4 +1,22 @@
-# NomivraAI client  
+# NomviraAI
+
+Travel planning with saved provider facts, deterministic budgets, weather,
+walking routes, Gemini itineraries and chat, consent-based memory, PDF export
+and revocable sharing. Next.js authenticates requests and signs database writes;
+FastAPI holds provider keys; Supabase Auth, PostgreSQL, RLS and pgvector enforce
+ownership. See the [architecture](docs/architecture/system-architecture.md).
+
+**Steps 16–17:** bounded provider failover, private structured logs, request IDs,
+latency/error/cache counters, protected diagnostics, configurable usage limits
+and optional Gemini token-cost estimates are implemented. **Release is blocked**
+by pending database verification/migrations and live provider failures. See the
+[verification record](docs/testing/testing.md) and [operations runbook](docs/deployment/deployment.md#operations-and-recovery-steps-16-17).
+No hosted deployment is claimed.
+
+Portfolio walkthrough: create a trip, save real places/hotel/food, generate a
+grounded itinerary, inspect budget/weather/routes, opt into preferences, then
+export or explicitly share a snapshot. [Verified mobile export UI](docs/assets/export-mobile.png)
+shows the actual components with fixture data; it is not a live acceptance result.
 
 **Step 15: Production Polish, Export, Sharing & Deployment** adds
 `/trips/[tripId]/export` with downloadable PDF, print layout and explicitly
@@ -51,6 +69,8 @@ npm run test:itineraries
 npm run test:budget
 npm run test:weather
 npm run test:companion
+npm run test:memory
+npm run test:sharing
 npm run test:deployment
 ```
 
@@ -72,7 +92,7 @@ Design-system controls keep state only in memory and reset on refresh. Their for
 ## Application shell
 
 - `src/app/(app)/layout.tsx` owns the shared shell and now requires a verified Supabase user before rendering. Proxy provides an additional route/session check; neither boundary simulates a signed-in session.
-- Home uses `/`, My Trips uses `/trips`, creation uses `/trips/new`, and the dynamic overview uses `/trips/[tripId]`. Explore, Companion, Saved, Settings, and Help remain placeholders.
+- Home uses `/`, My Trips uses `/trips`, creation uses `/trips/new`, and the dynamic overview uses `/trips/[tripId]`. Settings provides Preferences & Memory; Companion is available within an owned trip. Explore, Saved, and Help remain placeholders.
 - `src/components/nomvira/layout` contains the server-rendered shell, sidebar, header, mobile navigation, and reusable `PageHeader`. The trip wizard adds a client form boundary while reusing this shell.
 - `navigation/navigation-config.ts` supplies desktop, tablet, and mobile navigation from one definition. Active matching respects path segment boundaries and keeps My Trips active on nested trip routes.
 - At 1024px and above, a fixed 256px sidebar offsets the main area. From 768–1023px, a keyboard-accessible sheet provides navigation. Below 768px, a fixed 64px bottom navigation includes safe-area padding; main content reserves additional bottom space.

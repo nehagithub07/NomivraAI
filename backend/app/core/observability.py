@@ -178,6 +178,12 @@ class RuntimeMonitor:
         pricing = self.settings.gemini_pricing_json.get(model)
         if (
             pricing is None
+            or any(
+                not isinstance(getattr(usage, name, None), int)
+                or isinstance(getattr(usage, name, None), bool)
+                or getattr(usage, name) < 0
+                for name in ("prompt_token_count", "candidates_token_count")
+            )
             or cached > prompt
             or cached
             and pricing.cached_input_per_million is None
@@ -273,18 +279,27 @@ async def model_request(operation, **kwargs):
     model = kwargs["model"]
     monitor.reserve_model(model)
     counts, started = monitor.providers["gemini"], time.monotonic()
+    status, outcome = None, "success"
     try:
         response = await operation(**kwargs)
     except BaseException as exc:
+        code = getattr(exc, "code", None)
+        if isinstance(code, int) and not isinstance(code, bool) and 100 <= code <= 599:
+            status = code
+        outcome = "cancelled" if isinstance(exc, asyncio.CancelledError) else "failure"
         monitor.models[model]["failures"] += 1
         monitor.models[model]["usage_missing"] += 1
         counts["failures"] += 1
         counts["cancelled"] += int(isinstance(exc, asyncio.CancelledError))
+        counts["timeouts"] += int(
+            isinstance(exc, (TimeoutError, httpx.TimeoutException)) or status in (408, 504)
+        )
         raise
     else:
         monitor.model_usage(model, getattr(response, "usage_metadata", None))
         return response
     finally:
+        counts["last_http_status"] = status
         counts["completed"] += 1
         counts["latency_ms_total"] += (time.monotonic() - started) * 1000
         logger.info(
@@ -292,6 +307,8 @@ async def model_request(operation, **kwargs):
             extra={
                 "metrics": {
                     "model": model,
+                    "outcome": outcome,
+                    "http_status": status,
                     "elapsed_ms": round((time.monotonic() - started) * 1000),
                 }
             },

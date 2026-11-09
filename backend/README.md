@@ -78,6 +78,12 @@ Next.js runs at http://localhost:3000 and FastAPI at http://127.0.0.1:8000. On m
 
 Health is public and does not contact providers: `GET /health` returns `{"status":"ok","service":"nomivra-api"}`. Provider endpoints fail closed without the internal key. Keep FastAPI private/loopback, restrict deployment ingress to Next.js and use TLS between deployed services. Browser code never receives the internal key. No CORS middleware is needed; `FRONTEND_ORIGIN` records deployment intent rather than granting browser access.
 
+Steps 16–17 add `/ready`, protected `/api/v1/diagnostics`, private JSON request/provider
+logs, process-local cache/error/latency counters, optional token-cost estimates and
+configurable Gemini/provider usage limits. See the [operations runbook](../docs/deployment/deployment.md#operations-and-recovery-steps-16-17)
+and [verified results and release blockers](../docs/testing/testing.md). Live probes
+are opt-in: `python check_live.py --help` and `python check_journey.py --help`.
+
 ## Database migration and deployment
 
 Apply migrations **once in timestamp order**, through the existing Supabase migration workflow:
