@@ -15,7 +15,6 @@ from app.services.destination_service import (
     PlaceDiscoveryService,
 )
 
-
 router = APIRouter(
     prefix="/places",
     dependencies=[

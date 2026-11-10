@@ -18,7 +18,6 @@ from app.schemas.routing import (
     RouteSegment,
 )
 
-
 logger = logging.getLogger("nomvira.routing")
 
 

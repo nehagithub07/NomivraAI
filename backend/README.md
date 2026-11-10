@@ -45,7 +45,7 @@ Put the **same** value in root `.env.local` and `backend/.env`. This is your app
 Root `.env.local` (retain existing Supabase settings):
 
 ```dotenv
-NOMVIRA_API_URL=http://127.0.0.1:8000
+NOMVIRA_API_URL=http://127.0.0.1:8001
 NOMVIRA_INTERNAL_API_KEY=<random secret of at least 32 characters>
 ```
 
@@ -71,10 +71,10 @@ npm.cmd run dev
 Terminal 2:
 
 ```powershell
-backend/.venv/Scripts/python.exe -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 --reload --reload-dir backend
+backend/.venv/Scripts/python.exe -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8001 --reload --reload-dir backend --no-access-log
 ```
 
-Next.js runs at http://localhost:3000 and FastAPI at http://127.0.0.1:8000. On macOS/Linux use `python3`, `backend/.venv/bin/python` and `npm`. `tzdata` supplies IANA timezone definitions on Windows. Restart FastAPI after changing `backend/.env`: Python code reload does not reload environment-only edits. Restart Next.js after server environment changes if they are not picked up automatically.
+Next.js runs at http://localhost:3000 and FastAPI at http://127.0.0.1:8001. On macOS/Linux use `python3`, `backend/.venv/bin/python` and `npm`. `tzdata` supplies IANA timezone definitions on Windows. Restart FastAPI after changing `backend/.env`: Python code reload does not reload environment-only edits. Restart Next.js after server environment changes if they are not picked up automatically.
 
 Health is public and does not contact providers: `GET /health` returns `{"status":"ok","service":"nomivra-api"}`. Provider endpoints fail closed without the internal key. Keep FastAPI private/loopback, restrict deployment ingress to Next.js and use TLS between deployed services. Browser code never receives the internal key. No CORS middleware is needed; `FRONTEND_ORIGIN` records deployment intent rather than granting browser access.
 

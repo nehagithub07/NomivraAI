@@ -5,6 +5,7 @@ import logging
 import time
 from collections import defaultdict, deque
 from contextvars import ContextVar
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import httpx
@@ -52,6 +53,9 @@ class RuntimeMonitor:
                 timeouts=0,
                 cancelled=0,
                 blocked=0,
+                rate_limited=0,
+                consecutive_failures=0,
+                last_completed_at=None,
                 latency_ms_total=0.0,
                 last_http_status=None,
             )
@@ -259,6 +263,11 @@ class ObservedAsyncClient(httpx.AsyncClient):
         finally:
             counts["completed"] += 1
             counts["last_http_status"] = status
+            counts["last_completed_at"] = datetime.now(UTC).isoformat()
+            counts["rate_limited"] += int(status == 429)
+            counts["consecutive_failures"] = (
+                counts["consecutive_failures"] + 1 if status is None or status >= 300 else 0
+            )
             counts["latency_ms_total"] += (time.monotonic() - started) * 1000
             logger.info(
                 "provider_call",
@@ -300,6 +309,11 @@ async def model_request(operation, **kwargs):
         return response
     finally:
         counts["last_http_status"] = status
+        counts["last_completed_at"] = datetime.now(UTC).isoformat()
+        counts["rate_limited"] += int(status == 429)
+        counts["consecutive_failures"] = (
+            0 if outcome == "success" else counts["consecutive_failures"] + 1
+        )
         counts["completed"] += 1
         counts["latency_ms_total"] += (time.monotonic() - started) * 1000
         logger.info(

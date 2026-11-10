@@ -106,7 +106,8 @@ test("companion SQL: owned private chat, signed actions, replay/expiry guards an
       assert.equal((await db.query("select count(*)::int n from public.itinerary_versions where status='ready'")).rows[0].n,2);
     });
     await t.test("deleting the parent trip cascades private companion data",async()=>{
-      await db.query("delete from public.trips where id=$1",[tripId]);
+      assert.equal((await asUser(db,B,()=>db.query("delete from public.trips where id=$1 returning id",[tripId]))).rows.length,0);
+      assert.equal((await asUser(db,A,()=>db.query("delete from public.trips where id=$1 returning id",[tripId]))).rows.length,1);
       for(const table of ["companion_conversations","companion_messages","companion_pending_actions"])assert.equal((await db.query(`select count(*)::int n from public.${table}`)).rows[0].n,0);
     });
   } finally {await db.close();}

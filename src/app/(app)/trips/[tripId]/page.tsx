@@ -20,6 +20,7 @@ import { ProviderAttribution } from "@/components/nomvira/trips/provider-attribu
 import { TripNavigation } from "@/components/nomvira/trips/trip-navigation";
 import { getStaySelection, getCachedHotels } from "@/lib/accommodations/server";
 import { SelectedStaySummary } from "@/components/nomvira/hotels/selected-stay-summary";
+import { DeleteTripButton } from "@/components/nomvira/trips/delete-trip-button";
 
 type TripPageProps = { params: Promise<{ tripId: string }> };
 
@@ -45,7 +46,7 @@ export default async function TripOverviewPage({ params }: TripPageProps) {
       <Link href="/trips" className="type-small mb-5 inline-flex min-h-11 items-center gap-2 font-medium"><ArrowLeft className="size-4" aria-hidden="true" />Back to My Trips</Link>
       <PageHeader title={trip.destination_name}
         description={`${formatTripDates(trip.start_date, trip.end_date)} · ${durationLabel(tripDuration(trip.start_date, trip.end_date))} · ${travelersLabel(trip.travelers_count)}`}
-        actions={<Badge>{optionLabel(trip.status)}</Badge>} />
+        actions={<><Badge>{optionLabel(trip.status)}</Badge><DeleteTripButton tripId={trip.id} destination={trip.destination_name} redirectAfterDelete /></>} />
       <TripNavigation tripId={trip.id} active="overview" />
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <SurfaceCard size="panel" className="min-w-0 p-5 sm:p-8">

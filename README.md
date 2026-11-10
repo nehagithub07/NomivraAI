@@ -13,10 +13,21 @@ by pending database verification/migrations and live provider failures. See the
 [verification record](docs/testing/testing.md) and [operations runbook](docs/deployment/deployment.md#operations-and-recovery-steps-16-17).
 No hosted deployment is claimed.
 
+For the latest API/key audit and working/blocked matrix, read the
+[verification record](docs/testing/testing.md). Companion/Memory/Sharing setup
+errors have [step-by-step Supabase diagnosis and SQL instructions](docs/setup/database.md#current-project-diagnosis-and-repair).
+The [repository boundaries](docs/architecture/system-architecture.md#repository-boundaries)
+and `.github/workflows/ci.yml` describe the development structure and checks.
+
 Portfolio walkthrough: create a trip, save real places/hotel/food, generate a
 grounded itinerary, inspect budget/weather/routes, opt into preferences, then
 export or explicitly share a snapshot. [Verified mobile export UI](docs/assets/export-mobile.png)
 shows the actual components with fixture data; it is not a live acceptance result.
+
+Saved trips have a **Delete trip** action on My Trips cards and the trip overview.
+A confirmation is required. Deletion is owner-scoped and removes dependent saved
+plans, expenses, chat, trip-linked memories and sharing links through existing
+database cascades. Account-level travel preferences remain available.
 
 **Step 15: Production Polish, Export, Sharing & Deployment** adds
 `/trips/[tripId]/export` with downloadable PDF, print layout and explicitly
@@ -44,6 +55,10 @@ A light design system, responsive application shell, Home dashboard, Supabase au
 
 ## Run locally
 
+Use Node 24 (`.node-version`) and a configured Python environment (tested with
+Python 3.13). The local frontend uses port 3000 and FastAPI uses port 8001;
+follow the [backend startup commands](backend/README.md#run-locally).
+
 For Vercel + Render deployment, follow the [deployment guide](docs/deployment/deployment.md). The Next.js
 app and FastAPI API deploy as separate services; Supabase remains the auth/database.
 
@@ -57,22 +72,16 @@ Open http://localhost:3000 for the application shell. The development-only style
 ## Validate
 
 ```sh
+npm test
 npm run lint
 npm run typecheck
 npm run build
-npm run test:auth
-npm run test:trips
-npm run test:destinations
-npm run test:accommodations
-npm run test:food
-npm run test:itineraries
-npm run test:budget
-npm run test:weather
-npm run test:companion
-npm run test:memory
-npm run test:sharing
-npm run test:deployment
 ```
+
+Feature-specific `test:*` commands remain available in `package.json`.
+Run backend pytest/Ruff from the configured Python environment; see
+[backend validation](backend/README.md#validation). CI runs these checks without
+live provider credentials, deployment or database migrations.
 
 ## Foundation
 

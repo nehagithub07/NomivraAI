@@ -6,11 +6,12 @@ import type { TripRow } from "@/lib/supabase/database.types";
 import { durationLabel, travelersLabel, tripDuration } from "@/lib/trips/dates";
 import { optionLabel } from "@/lib/trips/options";
 import { formatTripBudget, formatTripDates } from "@/lib/travel-format";
+import { DeleteTripButton } from "./delete-trip-button";
 
 export function TripCard({ trip }: { trip: TripRow }) {
   return (
-    <SurfaceCard variant="interactive" className="h-full">
-      <Link href={`/trips/${trip.id}`} className="block h-full min-w-0 rounded-xl p-5 focus-visible:outline-offset-[-3px] sm:p-6">
+    <SurfaceCard variant="interactive" className="flex h-full flex-col">
+      <Link href={`/trips/${trip.id}`} className="block min-w-0 flex-1 rounded-xl p-5 focus-visible:outline-offset-[-3px] sm:p-6">
         <div className="flex items-start justify-between gap-3">
           <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-accent"><MapPin className="size-5 text-accent-foreground" aria-hidden="true" /></span>
           <Badge variant="outline">{optionLabel(trip.status)}</Badge>
@@ -20,6 +21,9 @@ export function TripCard({ trip }: { trip: TripRow }) {
         <p className="type-small mt-2 flex items-center gap-2 text-muted-foreground"><Users className="size-4" aria-hidden="true" />{durationLabel(tripDuration(trip.start_date, trip.end_date))} · {travelersLabel(trip.travelers_count)}</p>
         <p className="type-small mt-5 flex flex-wrap items-center gap-2 border-t pt-4 font-medium wrap-anywhere"><Wallet className="size-4 text-muted-foreground" aria-hidden="true" />{formatTripBudget(trip.budget_total, trip.currency)}</p>
       </Link>
+      <div className="mx-5 flex justify-end border-t py-2 sm:mx-6">
+        <DeleteTripButton tripId={trip.id} destination={trip.destination_name} />
+      </div>
     </SurfaceCard>
   );
 }

@@ -2,6 +2,7 @@ import asyncio
 import io
 import json
 import logging
+from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -72,6 +73,69 @@ async def test_transport_timeouts_are_measured_without_raw_errors():
     counts = monitor.snapshot()["providers"]["geoapify"]
     assert counts["timeouts"] == 1 and counts["failures"] == 1
     assert counts["last_http_status"] is None
+
+
+@pytest.mark.asyncio
+async def test_provider_observation_recency_rate_limits_and_recovery():
+    monitor = RuntimeMonitor(settings())
+    before = monitor.snapshot()["providers"]
+    assert before == {}
+    started = datetime.now(UTC)
+    statuses = iter([503, 429, None, 200])
+
+    def handler(request):
+        status = next(statuses)
+        if status is None:
+            raise httpx.ReadTimeout("NEVER_LOG", request=request)
+        return httpx.Response(status)
+
+    async with ObservedAsyncClient(
+        monitor=monitor, transport=httpx.MockTransport(handler)
+    ) as client:
+        await client.get("https://api.geoapify.com/v2/places")
+        await client.get("https://api.geoapify.com/v2/places")
+        with pytest.raises(httpx.ReadTimeout):
+            await client.get("https://api.geoapify.com/v2/places")
+        counts = monitor.snapshot()["providers"]["geoapify"]
+        assert counts["consecutive_failures"] == 3
+        assert counts["rate_limited"] == 1 and counts["timeouts"] == 1
+        assert started <= datetime.fromisoformat(counts["last_completed_at"]) <= datetime.now(UTC)
+        await client.get("https://api.geoapify.com/v2/places")
+    counts = monitor.snapshot()["providers"]["geoapify"]
+    assert counts["consecutive_failures"] == 0
+    assert counts["completed"] == 4 and counts["failures"] == 3
+    assert counts["rate_limited"] == 1 and counts["last_http_status"] == 200
+
+
+@pytest.mark.asyncio
+async def test_model_observation_recency_rate_limits_and_recovery():
+    class RateLimited(Exception):
+        code = 429
+
+    monitor = RuntimeMonitor(settings())
+    token = current_monitor.set(monitor)
+
+    async def unavailable(**kwargs):
+        raise RateLimited("NEVER_LOG")
+
+    async def recovered(**kwargs):
+        return SimpleNamespace(usage_metadata=None)
+
+    try:
+        with pytest.raises(RateLimited):
+            await model_request(unavailable, model="test")
+        counts = monitor.snapshot()["providers"]["gemini"]
+        observed = counts["last_completed_at"]
+        assert observed and counts["rate_limited"] == 1 and counts["consecutive_failures"] == 1
+        assert counts["last_http_status"] == 429
+        await model_request(recovered, model="test")
+    finally:
+        current_monitor.reset(token)
+    counts = monitor.snapshot()["providers"]["gemini"]
+    assert counts["last_completed_at"] >= observed
+    assert counts["consecutive_failures"] == 0 and counts["rate_limited"] == 1
+    # The SDK doesn't expose a raw success status, so no HTTP 200 is fabricated.
+    assert counts["last_http_status"] is None and counts["completed"] == 2
 
 
 @pytest.mark.asyncio

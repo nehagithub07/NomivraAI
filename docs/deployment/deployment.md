@@ -334,6 +334,11 @@ are bearer credentials. Review error rates after releases without billable probe
 Metrics cover backend calls, not browser map tiles or every Next.js/Supabase
 request. Counters are bounded, process-local and reset at restart. An unobserved
 provider is not a successful availability check.
+`last_completed_at` is the UTC time of the last completed attempt, including
+timeouts; inspect its age before using a prior observation during an incident.
+`consecutive_failures` resets after a successful attempt; `rate_limited` counts
+upstream HTTP 429s separately from locally `blocked` calls. These observations
+never trigger extra probes or guarantee current provider availability.
 
 ### Usage and cost controls
 

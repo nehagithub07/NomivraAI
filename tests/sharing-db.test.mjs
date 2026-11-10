@@ -85,8 +85,13 @@ test("sharing SQL: signed allowlist, owner isolation, anonymous read, rotation, 
       state = await create();
       await db.query("update public.trip_shares set expires_at=now()-interval '1 second' where trip_id=$1", [tripId]);
       assert.equal((await read(token)).rows[0].data, null);
-      await db.query("delete from public.trips where id=$1", [tripId]);
+      await db.query("update public.trip_shares set expires_at=now()+interval '1 day' where trip_id=$1", [tripId]);
+      assert.deepEqual((await read(token)).rows[0].data, doc);
+      assert.equal((await asUser(db, B, "delete from public.trips where id=$1 returning id", [tripId])).rows.length, 0);
+      assert.deepEqual((await read(token)).rows[0].data, doc);
+      assert.equal((await asUser(db, A, "delete from public.trips where id=$1 returning id", [tripId])).rows.length, 1);
       assert.equal((await db.query("select * from public.trip_shares")).rows.length, 0);
+      assert.equal((await read(token)).rows[0].data, null);
     });
   } finally { await db.close(); }
 });

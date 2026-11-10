@@ -77,8 +77,11 @@ test("memory SQL: persistence, consent, pgvector ownership, deletion and bounded
       assert.equal(row.preferences.travelPace, "relaxed");
       assert.deepEqual(row.preferences.dietaryPreferences, ["vegan"]);
       assert.doesNotMatch(row.content, /Private location|secret conversation|API key|2099/);
-      await db.query("delete from public.trips where id=$1", [tripId]);
+      assert.equal((await query(B, "delete from public.trips where id=$1 returning id", [tripId])).rows.length, 0);
+      assert.equal((await query(A, "select id from public.travel_memories where id=$1", [tripMemory])).rows.length, 1);
+      assert.equal((await query(A, "delete from public.trips where id=$1 returning id", [tripId])).rows.length, 1);
       assert.equal((await query(A, "select * from public.travel_memories where id=$1", [tripMemory])).rows.length, 0);
+      assert.equal((await query(A, "select user_id from public.travel_preferences")).rows.length, 1);
     });
     await t.test("retrieval returns no more than five and deleted records cannot be resurrected", async () => {
       for (let i = 0; i < 6; i++) {

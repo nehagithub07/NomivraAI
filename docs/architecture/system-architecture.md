@@ -1,5 +1,38 @@
 # System architecture
 
+## Repository boundaries
+
+The existing layout is a domain-organized application with two deployable services.
+Keep route contracts and migrations stable when adding features.
+
+| Path | Responsibility |
+| --- | --- |
+| `src/app/` | Next.js pages, layouts and thin authenticated API routes |
+| `src/components/ui/` | Shared accessible presentation primitives |
+| `src/components/nomvira/` | Product UI grouped by feature |
+| `src/lib/<domain>/` | Validation, typed contracts, BFF orchestration and domain rules |
+| `src/lib/supabase/` | Browser/server clients and database types |
+| `backend/app/api/` | Internal HTTP endpoints and authentication dependencies |
+| `backend/app/schemas/` | Validated provider/service request and response contracts |
+| `backend/app/services/` | Travel orchestration, deterministic calculations and caches |
+| `backend/app/providers/` | External provider adapters and response parsing |
+| `backend/app/core/` | Settings, errors, HTTP limits, logging and monitoring |
+| `supabase/migrations/` | Ordered, reviewed schema/RLS/function changes |
+| `supabase/diagnostics/` | Read-only operational SQL; never applied as migrations |
+| `tests/`, `backend/tests/` | Frontend/BFF/SQL and Python regression tests |
+| `.github/workflows/` | Secret-free automated CI checks; no deployment |
+| `scripts/`, `backend/check_*.py` | Explicit setup, deployment validation and opt-in live probes |
+| `docs/` | Architecture, setup, features, operations and verification evidence |
+| `.qa/` | Ignored local diagnostics/artifacts; never production source |
+
+Provider adapters must not write database records. UI components must not hold
+provider secrets or implement independent budget/ranking rules. Prefer the existing
+domain entry points over duplicate utilities. Development fixtures stay guarded
+and outside production responses. CI tests use synthetic inputs and PGlite; live
+provider probes are deliberately excluded from CI to protect user data and quota.
+
+## Request flow
+
 NomivraAI uses Next.js App Router/TypeScript as its authenticated browser backend,
 Supabase Auth/PostgreSQL for user-owned trip data, and FastAPI for provider access
 and deterministic travel services. Vercel hosts Next.js; Render hosts one FastAPI

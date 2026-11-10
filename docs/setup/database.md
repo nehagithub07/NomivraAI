@@ -1,4 +1,8 @@
-# Step 5: Supabase trip setup
+# Supabase database setup
+
+For the current Companion/Memory/Sharing setup errors, follow
+[current-project diagnosis and repair](#current-project-diagnosis-and-repair).
+The Step 5 foundation and historical schema notes below describe earlier setup.
 
 ## Apply the migration
 
@@ -70,5 +74,129 @@ Patterns follow the official [Supabase RLS guide](https://supabase.com/docs/guid
 4. Verify interest failure rolls back the parent; trip/account deletion cascades to interests.
 5. Verify real expired sessions and network failures preserve the wizard and allow retry after sign-in. Local contract/offline checks do not establish hosted provider/cookie behavior.
 
-No existing-trip edit/delete UI, AI itinerary, external travel API, currency conversion, or budget allocation engine is included.
+The original Step 5 scope excluded later planning/provider features. See README
+for the current application feature set.
+
+## Current-project diagnosis and repair
+
+Verified 2026-11-09: login, signed trip creation and the core trip tables work.
+The Data API cannot find Companion, preferences/memories or sharing objects.
+This causes `COMPANION_SETUP_REQUIRED` and unavailable Memory/Sharing states.
+REST 404/PGRST205 alone cannot distinguish a missing table from a stale schema
+cache; inspect the live catalogs before changing anything.
+
+### 1. Inspect, without modifying data
+
+In Supabase Dashboard, match the project reference to the hostname in
+`NEXT_PUBLIC_SUPABASE_URL` from `.env.local`. Open SQL Editor as the project owner
+and run [readiness.sql](../../supabase/diagnostics/readiness.sql). It reports
+required tables, RLS/policy presence, RPCs, anonymous execution privileges,
+extensions and the food-provider constraint. It reads no user records or keys.
+
+If the expected objects already exist with the correct policies/functions, try
+the schema-cache refresh below and retest before applying migrations.
+
+### 2. Establish recovery
+
+Confirm the intended project has a restorable backup/PITR point, or a validated
+database dump and a tested restore procedure. Record its timestamp. No backup,
+admin connection or recovery capability was established from this workspace.
+The publishable key and a normal login cannot apply SQL migrations.
+Follow [Supabase's backup/restore guide](https://supabase.com/docs/guides/platform/migrating-within-supabase/backup-restore).
+
+### 3. Review the pending feature migrations
+
+| File in `supabase/migrations/` | Purpose |
+| --- | --- |
+| `20261030000900_ai_companion.sql` | Conversations, messages, pending actions, signed RPCs and owner RLS |
+| `20261030001000_place_refresh_and_map_backfill.sql` | Signed place refresh/map-related compatibility; inspect whether already installed |
+| `20261105001100_rated_food_provider.sql` | Allows saved Google Maps food identities; preserves signed itinerary checks |
+| `20261106001200_personalization_memory.sql` | Preferences, memories, pgvector and owner-scoped retrieval/deletion |
+| `20261106001300_trip_sharing.sql` | Approved snapshots, expiring tokens and revocation |
+
+Do not replay unconditional create-table migrations against partially installed
+objects. Stop on conflicting schema, destructive changes or missing recovery.
+Core trip creation already works; there is no reason to reset its tables or RLS.
+
+### 4. Existing supported schema: prepare the reviewed atomic setup
+
+From the repository root in PowerShell:
+
+```powershell
+npm.cmd run db:prepare
+code .qa/setup-trip-database.sql
+```
+
+This command only writes a local file; it does not connect to or modify Supabase.
+It was run during this audit and the private file is ready for review. The script
+checks the supported existing foundation, installs missing feature groups,
+refreshes compatible signed functions/food constraints and maintains owner RLS
+inside a transaction. Its upgrade paths are exercised by PostgreSQL tests.
+
+After identity, schema compatibility and recovery checks pass, paste the complete
+file into the intended project's SQL Editor and run it once. It contains the
+existing internal signing key, so keep it private and outside Git/chat. It does
+not contain provider keys. An error must roll back the transaction; do not bypass
+its guards or manually delete tables to force it through.
+
+Alternatively, administrators who already maintain CLI migration history can
+use the workflow below. Do not use both workflows blindly: SQL Editor changes
+may already exist without CLI history entries.
+
+```powershell
+npx supabase@latest login
+# Only if supabase/config.toml does not yet exist:
+npx supabase@latest init
+npx supabase@latest projects list
+npx supabase@latest link --project-ref YOUR_VERIFIED_PROJECT_REF
+npx supabase@latest migration list --linked
+npx supabase@latest db push --linked --dry-run
+```
+
+Compare the dry run with live objects and reviewed migration history. If it lists
+already installed migrations, stop and reconcile that history after inspecting
+their actual definitions; marking migrations applied does not execute SQL.
+Only after recovery and compatibility are established should an administrator run
+`npx supabase@latest db push --linked`. The audit did not execute any of these
+remote commands. CLI flags are documented in the [official reference](https://supabase.com/docs/reference/cli/supabase-db-push).
+
+### 5. Refresh and verify
+
+Run in SQL Editor after successful setup, or when objects exist but REST is stale:
+
+```sql
+NOTIFY pgrst, 'reload schema';
+```
+
+Run `readiness.sql` again: required tables must exist with RLS and policies,
+write RPCs must deny anonymous execution, and `vector` must be installed.
+`get_shared_trip` intentionally allows anonymous read-only token lookup.
+Verify signed-in Companion, preference save/reset, consented retrieval/deletion,
+share creation/revocation and isolation using two accounts. No RLS policy should
+be disabled to make a failing request succeed.
+
+Reload the app. Database-only updates do not require changing API keys. Restart
+FastAPI only when changing backend environment values. StayAPI HTTP 402 and
+upstream Gemini/Overpass failures require provider recovery independently of SQL.
+
+Older trips can also return `WEATHER_CONTEXT_CHANGED` when their original creation
+did not capture a confirmed provider ID, latitude/longitude and timezone. One such
+trip was verified in this audit. Creating a new trip through destination search
+supplies validated metadata. Updating an old trip in place needs a validated,
+ownership-checked re-resolution workflow; do not invent coordinates/timezones in SQL.
+
+The latest provider checks support these optional local configuration choices:
+
+```dotenv
+# Verified working generation model; avoids the currently slow primary failover.
+GEMINI_MODEL=gemini-3.6-flash
+GEMINI_ITINERARY_MODEL=gemini-3.6-flash
+# Tested alternative to Google Maps food while StayAPI access is unavailable.
+FOOD_PROVIDER=geoapify
+```
+
+These are explicit choices for `backend/.env`, not changes made by the audit.
+They change the model/food source and do not fix hotel account access or database
+migrations. Restart FastAPI after changing them; existing provider facts and saved
+selections must retain their source. No availability guarantee follows from one test.
 
