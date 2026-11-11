@@ -1,223 +1,258 @@
-# NomviraAI
+﻿<div align="center">
+  <img src="public/Logo.png" alt="NomviraAI travel mascot" width="180" />
 
-Travel planning with saved provider facts, deterministic budgets, weather,
-walking routes, Gemini itineraries and chat, consent-based memory, PDF export
-and revocable sharing. Next.js authenticates requests and signs database writes;
-FastAPI holds provider keys; Supabase Auth, PostgreSQL, RLS and pgvector enforce
-ownership. See the [architecture](docs/architecture/system-architecture.md).
+  <h1>NomviraAI</h1>
 
-**Steps 16–17:** bounded provider failover, private structured logs, request IDs,
-latency/error/cache counters, protected diagnostics, configurable usage limits
-and optional Gemini token-cost estimates are implemented. **Release is blocked**
-by pending database verification/migrations and live provider failures. See the
-[verification record](docs/testing/testing.md) and [operations runbook](docs/deployment/deployment.md#operations-and-recovery-steps-16-17).
-No hosted deployment is claimed.
+  <p><strong>Your trip, thoughtfully planned.</strong></p>
+  <p>An AI travel planner that brings destination discovery, personalized itineraries,<br />budgets, weather, and walking routes into one workspace.</p>
 
-For the latest API/key audit and working/blocked matrix, read the
-[verification record](docs/testing/testing.md). Companion/Memory/Sharing setup
-errors have [step-by-step Supabase diagnosis and SQL instructions](docs/setup/database.md#current-project-diagnosis-and-repair).
-The [repository boundaries](docs/architecture/system-architecture.md#repository-boundaries)
-and `.github/workflows/ci.yml` describe the development structure and checks.
+  <p>
+    <img src="https://img.shields.io/badge/Next.js-16-111111?logo=nextdotjs&amp;logoColor=white" alt="Next.js 16" />
+    <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&amp;logoColor=white" alt="TypeScript" />
+    <img src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&amp;logoColor=white" alt="FastAPI" />
+    <img src="https://img.shields.io/badge/Supabase-3ECF8E?logo=supabase&amp;logoColor=111111" alt="Supabase" />
+    <img src="https://img.shields.io/badge/AI-Gemini-8866E9" alt="Google Gemini" />
+  </p>
 
-Portfolio walkthrough: create a trip, save real places/hotel/food, generate a
-grounded itinerary, inspect budget/weather/routes, opt into preferences, then
-export or explicitly share a snapshot. [Verified mobile export UI](docs/assets/export-mobile.png)
-shows the actual components with fixture data; it is not a live acceptance result.
+  <p>
+    <a href="#features">Features</a> &middot;
+    <a href="#architecture">Architecture</a> &middot;
+    <a href="#getting-started">Getting started</a> &middot;
+    <a href="#validation">Validation</a> &middot;
+    <a href="#documentation">Documentation</a>
+  </p>
+</div>
 
-Saved trips have a **Delete trip** action on My Trips cards and the trip overview.
-A confirmation is required. Deletion is owner-scoped and removes dependent saved
-plans, expenses, chat, trip-linked memories and sharing links through existing
-database cascades. Account-level travel preferences remain available.
+---
 
-**Step 15: Production Polish, Export, Sharing & Deployment** adds
-`/trips/[tripId]/export` with downloadable PDF, print layout and explicitly
-approved, expiring read-only sharing links. Links can be copied after reload,
-replaced or revoked. Apply `20261106001300_trip_sharing.sql` after Step 14;
-`npm run db:prepare` includes it. See the [deployment and acceptance guide](docs/deployment/deployment.md#export-sharing-and-release-checks).
-Run `npm run test:sharing` for export/privacy, authenticated BFF and PostgreSQL
-sharing checks. Production uses saved dashboard data; sample journeys require a
-development preview. No new production dependencies or provider keys are needed.
+## Overview
 
-**Step 14: Personalization, Memory & RAG** adds approved travel defaults and
-consent-based memory controls at `/settings`, with private pgvector retrieval for
-itinerary and Companion context. Apply `20261106001200_personalization_memory.sql`
-before enabling it. See the [Step 14 setup, privacy and validation guide](docs/history/step-14.md).
+Planning a trip often means switching between maps, accommodation searches, weather forecasts, spreadsheets, and chat. NomviraAI connects those tasks around a saved trip, so the destination, dates, preferences, and budget stay consistent throughout planning.
 
-**Step 12: AI Travel Companion** is available per owned trip at
-`/trips/[tripId]/companion`. It extends the existing Gemini provider with manual,
-validated function calling, source cards, private chat history, and confirmation
-cards for seven explicit trip changes. Apply migration
-`20261030000900_ai_companion.sql` before use. See the [feature guide](docs/features/ai-companion.md),
-[architecture](docs/architecture/system-architecture.md), and
-[implementation/validation record](docs/history/step-12.md).
+The application combines a responsive Next.js interface, Python travel services, and a user-owned PostgreSQL data model. Gemini builds itineraries from verified place candidates, while application code handles money calculations, access control, and validation.
 
-A light design system, responsive application shell, Home dashboard, Supabase authentication, and a Create Trip Wizard with user-owned PostgreSQL data. Destination discovery, hotel/food recommendations, AI itinerary planning, deterministic budgets, weather adaptation and trip chat use the existing Next.js BFF, FastAPI services and signed Supabase persistence. Public providers remain subject to their terms; Gemini requires a private API key. Follow [authentication setup](docs/setup/authentication.md), [database setup](docs/setup/database.md), [backend setup](backend/README.md), [AI itineraries](docs/features/ai-itinerary.md), and [budget tracking](docs/features/budget-engine.md).
+**Project stage:** active development. The core planning workflow has recorded live integration results; Companion, Memory, and Sharing still require database verification, and hosted deployment acceptance is pending. See [current status](#current-status).
 
-## Run locally
+## Features
 
-Use Node 24 (`.node-version`) and a configured Python environment (tested with
-Python 3.13). The local frontend uses port 3000 and FastAPI uses port 8001;
-follow the [backend startup commands](backend/README.md#run-locally).
+| Capability | What it provides |
+| --- | --- |
+| **Trip workspace** | A seven-step creation wizard for destination, dates, travelers, budget, interests, preferences, and review; saved trip dashboards and deletion controls. |
+| **Destination discovery** | Canonical destination search and nearby attractions using Open-Meteo, OpenStreetMap, and Geoapify integrations. |
+| **Stays and food** | Hotel ranking, dietary and cuisine filters, a selected stay, and saved food spots, with provider attribution. |
+| **AI itineraries** | Day-by-day Gemini plans grounded in discovered attractions and saved selections, with server validation and immutable version history. |
+| **Budget tracking** | Decimal-safe category allocations, planned and actual expenses, remaining balances, and per-person summaries. |
+| **Weather-aware planning** | Forecasts, activity conflicts, and itinerary adaptation that preserves previous versions. |
+| **Maps and routes** | Interactive MapLibre maps and openrouteservice walking routes for saved itinerary activities. |
+| **AI Travel Companion** | Trip-aware chat, source cards, private conversation history, and explicit confirmation before supported trip changes. |
+| **Preferences and memory** | Opt-in travel defaults and consent-based memories, with private pgvector retrieval for relevant planning context. |
+| **Export and sharing** | PDF downloads, a print layout, and explicitly approved read-only snapshots with expiring, revocable links. |
+| **Authentication** | Supabase email/password and Google sign-in flows, session verification, and ownership checks backed by row-level security. |
 
-For Vercel + Render deployment, follow the [deployment guide](docs/deployment/deployment.md). The Next.js
-app and FastAPI API deploy as separate services; Supabase remains the auth/database.
+Features depend on the corresponding migrations and provider configuration. Current integration limits are documented [below](#current-status).
 
-```sh
-npm install
+### Planning workflow
+
+1. **Create a trip** with your destination, dates, travelers, interests, and budget.
+2. **Discover options** and save attractions, a stay, and food spots.
+3. **Generate an itinerary** from the saved trip context and real place candidates.
+4. **Refine the plan** using budgets, weather, walking routes, and Companion suggestions.
+5. **Take it with you** as a PDF or an explicitly shared snapshot.
+
+## Tech stack
+
+| Layer | Technologies |
+| --- | --- |
+| Frontend | Next.js 16 App Router, React 19, TypeScript |
+| UI and forms | Tailwind CSS 4, locally owned shadcn/ui components, Radix UI, Lucide, React Hook Form, Zod |
+| Backend | Python, FastAPI, Pydantic, HTTPX, Uvicorn |
+| Authentication and data | Supabase Auth, PostgreSQL, row-level security, pgvector |
+| AI | Google Gemini through the Google Gen AI SDK; structured output, validated function calling, and embeddings |
+| Maps and travel data | MapLibre GL, OpenFreeMap, Open-Meteo, OpenStreetMap/Overpass, Geoapify, StayAPI, openrouteservice |
+| Testing | Node.js test runner, PGlite with pgvector, pytest, Ruff, ESLint, TypeScript |
+| Delivery | GitHub Actions CI; deployment configuration for Vercel and Render |
+
+## Architecture
+
+The browser talks to authenticated Next.js routes. Next.js verifies the user, loads the owned trip, and sends trusted planning context to FastAPI. FastAPI handles provider integrations and travel calculations; Supabase stores user-owned application data.
+
+```mermaid
+flowchart LR
+    Browser["Browser · React UI"] --> Next["Next.js · Authenticated API"]
+    Next --> Supabase["Supabase · Auth + PostgreSQL + RLS"]
+    Next -->|Private internal key| API["FastAPI · Travel services"]
+    API --> Gemini["Gemini · Planning, chat, embeddings"]
+    API --> Providers["Places, stays, food, weather, routing"]
+```
+
+### Engineering highlights
+
+- **Grounded AI output.** Itinerary candidates come from trusted trip data. Server validation checks place IDs, dates, and pace before saving a version; display facts are resolved from provider records.
+- **Deterministic money calculations.** Python Decimal arithmetic handles budget allocations and expense reconciliation independently of the language model.
+- **Layered authorization.** Verified sessions, trip ownership, PostgreSQL RLS, and signed database operations protect persisted data. Provider credentials stay in FastAPI's private environment.
+- **Controlled AI actions.** Companion proposes supported changes through validated tools. Mutations require an explicit user confirmation and server-side revalidation.
+- **Consent-based personalization.** Approved preferences and memories provide retrieval context. Shared snapshots exclude private memories, conversations, and special requests.
+- **Bounded provider access.** Timeouts, caches, request coalescing, rate limits, and provider failover control external calls. Structured logs, request IDs, and protected diagnostics support troubleshooting.
+
+See the [system architecture](docs/architecture/system-architecture.md) for request flows and service boundaries.
+
+## Getting started
+
+### Prerequisites
+
+- **Node.js 24** and npm, matching [`.node-version`](.node-version).
+- **Python 3.13**, matching the backend CI environment.
+- A **Supabase project** with Auth enabled and the project migrations applied.
+- Provider credentials for the integrations you want to exercise: Gemini, StayAPI, Geoapify, and openrouteservice.
+
+The commands below use PowerShell from the repository root. On macOS/Linux, use `python3` to create the environment and `backend/.venv/bin/python` for its executable. If PowerShell blocks the npm script wrapper, use `npm.cmd`.
+
+### 1. Install dependencies
+
+```powershell
+npm ci
+py -3.13 -m venv backend/.venv
+backend/.venv/Scripts/python.exe -m pip install -r backend/requirements-dev.txt
+```
+
+### 2. Configure environment variables
+
+Create local environment files if they do not already exist:
+
+```powershell
+if (!(Test-Path .env.local)) { Copy-Item .env.example .env.local }
+if (!(Test-Path backend/.env)) { Copy-Item backend/.env.example backend/.env }
+```
+
+| File | Configuration |
+| --- | --- |
+| `.env.local` | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_SITE_URL`, `NOMVIRA_API_URL`, and `NOMVIRA_INTERNAL_API_KEY`. The map style has a default in the template. |
+| `backend/.env` | The matching `NOMVIRA_INTERNAL_API_KEY`, `FRONTEND_ORIGIN`, provider selection, and private provider credentials. Use the template for model names and provider defaults. |
+
+Generate an internal application key:
+
+```powershell
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+```
+
+Use the **same key** in both environment files and the database configuration prepared in the next step. Keep provider keys in `backend/.env`; only browser-safe settings belong in `NEXT_PUBLIC_*` variables. Real environment files and generated setup SQL must remain private.
+
+In Supabase Auth, configure the sign-in providers, site URL, redirect URLs, and email templates for your local application at `http://localhost:3000`.
+
+### 3. Prepare the database
+
+For a fresh Supabase project, first apply [`20261028000100_create_trips.sql`](supabase/migrations/20261028000100_create_trips.sql) in the SQL Editor. Existing projects should retain their migration history and data.
+
+Then prepare the remaining supported upgrades and matching database secret:
+
+```powershell
+npm run db:prepare
+```
+
+Run the generated **private** `.qa/setup-trip-database.sql` in the matching Supabase project's SQL Editor. The command generates a local file; it does not apply changes to Supabase automatically.
+
+Follow the [database setup and diagnosis guide](docs/setup/database.md) for schema checks and the [migration instructions](backend/README.md#database-migration-and-deployment) for more detail.
+
+### 4. Start both services
+
+In one terminal:
+
+```powershell
 npm run dev
 ```
 
-Open http://localhost:3000 for the application shell. The development-only style preview remains at http://localhost:3000/design-system, outside the application shell. It returns 404 in production and carries no-index metadata.
+In a second terminal, also from the repository root:
 
-## Validate
+```powershell
+backend/.venv/Scripts/python.exe -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8001 --reload --reload-dir backend --no-access-log
+```
 
-```sh
+Open the application at **http://localhost:3000**. FastAPI runs at **http://127.0.0.1:8001**; its `/health` endpoint provides a liveness check without contacting travel providers.
+
+Provider-backed features require working credentials and matching database setup. Explicit development fixtures are available for selected integrations; production rejects fixture responses. See the [backend guide](backend/README.md) for provider modes and configuration.
+
+## Project structure
+
+```text
+src/
+  app/                    Pages, layouts, authentication, and API routes
+  components/
+    nomvira/              Product UI organized by travel feature
+    ui/                   Shared accessible UI primitives
+  lib/                    Domain logic, validation, and server orchestration
+backend/
+  app/
+    api/                  Internal FastAPI endpoints
+    core/                 Configuration, logging, limits, and monitoring
+    providers/            External provider adapters
+    schemas/              Pydantic request and response models
+    services/             Travel services and deterministic calculations
+  tests/                  Python regression tests
+supabase/
+  migrations/             Database schema, policies, and signed functions
+  diagnostics/            Read-only database checks
+tests/                    Frontend, API, and PostgreSQL regression tests
+scripts/                  Database preparation and deployment checks
+public/                   Branding and destination illustrations
+docs/                     Architecture, setup, features, and verification
+.github/workflows/        Continuous integration
+```
+
+## Validation
+
+Run the frontend checks from the repository root:
+
+```powershell
 npm test
 npm run lint
 npm run typecheck
 npm run build
 ```
 
-Feature-specific `test:*` commands remain available in `package.json`.
-Run backend pytest/Ruff from the configured Python environment; see
-[backend validation](backend/README.md#validation). CI runs these checks without
-live provider credentials, deployment or database migrations.
+Run the backend checks from `backend/`:
 
-## Foundation
+```powershell
+.venv/Scripts/python.exe -m pytest -q
+.venv/Scripts/python.exe -m ruff check app tests check_deployment.py check_live.py check_journey.py
+.venv/Scripts/python.exe -m pip check
+```
 
-- Next.js App Router, TypeScript, Tailwind CSS v4, Geist via `next/font`.
-- Locally owned shadcn/ui components in `src/components/ui`, using Radix for accessible select and slot behavior.
-- Semantic light-theme tokens and typography utilities in `src/app/globals.css`. Tailwind v4 maps them through `@theme inline`; no separate Tailwind configuration is needed.
-- Nomvira primitives in `src/components/nomvira`: wordmark, section heading, icon button, surface card, accent badge, and page container.
-- Use `Button` variants `default`, `secondary`, `ghost`, `destructive`, and `accent`. The `loading` prop disables native buttons and exposes `aria-busy`. Use native buttons for loading and disabled states; `asChild` is for enabled links.
-- Inputs and selects are 48px tall; default buttons and circular icon buttons are 44px. Controls use 12–14px corners, cards 18px, panels 24px, and feature panels 28px.
-- Use `SurfaceCard` variants `standard`, `interactive`, `muted`, and `accent`. Supply a real button or link inside interactive cards. Hover lift is capped at 2px.
-- The 4px spacing rhythm supports 4, 8, 12, 16, 20, 24, 32, 40, 48, 64, 80, and 96px. Page padding is 16px mobile, 24px tablet, 32px desktop.
-- Supporting text uses `muted-foreground`; the lighter `text-muted` token is reserved for decoration. Orange backgrounds use dark text. Accent foreground is deepened for readable small labels.
-- Lucide stroke width is centralized at 1.65. Transitions use 180ms ease-out, and reduced-motion preferences are respected.
+Feature-specific commands such as `npm run test:itineraries`, `npm run test:budget`, and `npm run test:sharing` are listed in [`package.json`](package.json).
 
-Design-system controls keep state only in memory and reset on refresh. Their form examples do not submit or save data. No server-folder files are used.
+[GitHub Actions](.github/workflows/ci.yml) runs frontend and backend checks using mocked providers and local PostgreSQL-compatible tests. Live provider probes, hosted migrations, and deployment are separate from CI. The [verification record](docs/testing/testing.md) contains the recorded results and acceptance limits.
 
-## Application shell
+## UI preview
 
-- `src/app/(app)/layout.tsx` owns the shared shell and now requires a verified Supabase user before rendering. Proxy provides an additional route/session check; neither boundary simulates a signed-in session.
-- Home uses `/`, My Trips uses `/trips`, creation uses `/trips/new`, and the dynamic overview uses `/trips/[tripId]`. Settings provides Preferences & Memory; Companion is available within an owned trip. Explore, Saved, and Help remain placeholders.
-- `src/components/nomvira/layout` contains the server-rendered shell, sidebar, header, mobile navigation, and reusable `PageHeader`. The trip wizard adds a client form boundary while reusing this shell.
-- `navigation/navigation-config.ts` supplies desktop, tablet, and mobile navigation from one definition. Active matching respects path segment boundaries and keeps My Trips active on nested trip routes.
-- At 1024px and above, a fixed 256px sidebar offsets the main area. From 768–1023px, a keyboard-accessible sheet provides navigation. Below 768px, a fixed 64px bottom navigation includes safe-area padding; main content reserves additional bottom space.
-- The existing `PageContainer` is reused with a 1440px shell-specific maximum. Step 1's tokens, typography, spacing, radii, and existing primitives are unchanged.
-- The profile dropdown links to Settings and Help and signs out through a Supabase Server Action. Its name and avatar/initials come from the verified user. Profile remains a disabled future feature. Search is a focusable, read-only visual placeholder; notifications are marked unavailable. There is no command palette, fake search, or unread count.
-- `EmptyState` is a small server-rendered component shared by all placeholder pages. Real module implementations can replace each page's content without changing the shell.
-- Radix Dialog and Dropdown Menu back the shell controls. Step 5 adds React Hook Form and its Zod resolver; no state-management or date library was added.
+<p align="center">
+  <img src="docs/assets/export-mobile.png" alt="Mobile Export and Share interface with PDF download, print, and optional sharing controls" width="300" />
+</p>
 
-## Home Dashboard
+<p align="center"><em>Actual Export &amp; Share components rendered with development fixture data. This preview demonstrates the interface; live sharing acceptance is pending.</em></p>
 
-- `/` renders the mostly server-rendered dashboard from `src/components/nomvira/dashboard`. It reuses the existing shell, surfaces, section headings, buttons, inputs, badges, typography, and empty-state component. No theme tokens, shell behavior, or existing module placeholders were changed for Step 3.
-- The upcoming card uses the nearest real planning/active trip with `start_date >= today` (UTC day for this server-rendered query), ordered by start date. No result uses the existing no-trip state; database failures show an error. No weather, activity counts, or budget spending is fabricated.
-- `src/lib/mock/dashboard.ts` retains destination recommendations, recent-trip examples, and insight, clearly labeled as sample content. Recent sample cards do not link to fabricated trip IDs. The greeting uses verified user identity. `travel-format.ts` formats date-only values in UTC and preserves decimal budget amounts.
-- Home's destination starter navigates to `/trips/new?destination=...`, prefilling search text. The user still selects and resolves a real destination. The overview fetches real UUID trips through the authenticated session and RLS; missing or inaccessible trips return not-found.
-- Recommendations use a horizontal snap row on mobile, two columns at tablet widths, and four at 1280px and above. Existing shell padding protects content from the mobile bottom navigation.
-- Five original local SVG illustrations live in `public/destinations`. No photos were downloaded or hotlinked. Next.js `Image` reserves their layout space. These small local recommendation assets load eagerly so the empty-dashboard view can show them immediately; reassess loading priority when replacing them with larger photos.
-- The upcoming card displays the saved total budget and styles. Recommendations, insights, and recent examples retain their sample labels.
-- `Skeleton` was absent from Step 1, so a small conventional shadcn/ui skeleton primitive was added without dependencies. `dashboard-skeletons.tsx` exports reusable upcoming-trip, destination-card, recent-trip, and full-dashboard skeletons. Reduced-motion preferences disable the pulse.
-- In development, open `/?preview=empty` for a user with no trips or `/?preview=loading` for the skeleton preview. The empty preset clears upcoming and recent trips while retaining recommendations and an appropriate example insight. Production ignores these preview flags. There is no fake loading delay or API lifecycle.
+## Current status
 
-## Create Trip Wizard and persistence
+The [verification record dated November 10, 2026](docs/testing/testing.md) reports successful offline checks and live results for login, trip creation, attraction discovery, itinerary persistence, budgets, weather, walking routes, and export.
 
-The seven steps are **Destination → Dates → Travelers → Budget → Interests → Preferences → Review**. A single React Hook Form instance retains values on Back and Review Edit. Continue validates the current step; the shared Zod schema validates the full submission again on the server.
+Remaining acceptance work includes:
 
-- Destination uses authenticated Open-Meteo search (3–100 query characters), canonical provider metadata and a signed proof. Selection is immediate; no billing session token or redundant Details call is used. Native date inputs reuse the existing Input because no Calendar/date library existed. Dates stay `YYYY-MM-DD`; duration includes both endpoints. Past starts use the browser's IANA time zone, checked on the server and RPC too.
-- Travelers range from 1–20. Currency definitions are centralized. Budgets stay decimal text until PostgreSQL `numeric(12,2)`, with at most two decimals and a limit of 100,000,000. The trip wizard does not perform exchange-rate conversion; Step 10 derives deterministic category allocations from the saved trip budget.
-- Interests require 1–8 selections. Balanced style/pace, 1 traveler, and Hotel are defaults. An empty dietary array means No preference. Optional special requests are limited to 500 characters.
-- Accessible option inputs, step announcements, field errors, loading states, and duplicate-click protection are included. Database/network errors preserve values. An expired session offers sign-in in another tab. Drafts remain in memory; refresh/leaving clears them.
-- The authenticated Server Action explicitly maps user input and sends signed provider data to `create_resolved_trip`, which validates identity/proof and reuses Step 5's atomic trip/interests creation. Canonical name, provider ID, display name, country/admin fields, coordinates, timezone and feature/population data are persisted. Both trip tables retain RLS, restricted grants, constraints, and indexes.
-- My Trips and the UUID overview use real user-owned rows. The overview displays the saved requirements and links to Hotels, Food, Itinerary, and Budget. Trip edit/delete UI remains future work.
+- Verifying or applying the hosted database setup for Companion, Preferences/Memory, and Sharing.
+- Retesting hotel and food selections after inconsistent provider responses.
+- Completing email/OAuth, cross-account isolation, and full browser acceptance checks.
+- Validating the deployed Vercel and Render services together with Supabase.
 
-See [database setup](docs/setup/database.md) for migration deployment, existing legacy-table preservation, columns/policies/indexes, and manual type alignment. See [the Step 5 record](docs/history/step-05.md) for the file list and verification results.
+Explore, Saved, and Help remain placeholder pages. Provider availability and quotas affect live searches. The project includes deployment configuration; hosted release verification is pending.
 
-If creating a trip, saving a stay, saving a food spot, generating an itinerary, or storing budget entries needs a database setup update, run `npm run db:prepare`. Run the generated private `.qa/setup-trip-database.sql` in your Supabase SQL Editor to install missing Step 6/7/8/9/10 migrations and configure the matching database secret atomically. The command prepares the file without changing the hosted database; see [backend/README.md](backend/README.md#database-migration-and-deployment). Existing trips are retained. Recent destination searches are cached in memory to avoid repeated provider and authentication requests.
+## Documentation
 
-## Authentication
-
-- Follow [authentication setup](docs/setup/authentication.md) for `.env.local`, Supabase Email/Google providers, Site URL/redirect configuration, SMTP, and the required verification/recovery email templates.
-- Public routes are `/login`, `/signup`, `/forgot-password`, `/reset-password`, and `/verify-email`. `/auth/confirm` verifies token hashes; `/auth/callback` exchanges PKCE codes.
-- Next.js 16 uses `src/proxy.ts` to refresh cookie sessions and redirect logged-out app GETs. The `(app)` layout and data operations independently verify users. A trip action POST can return an expired-session error without discarding the form. App/auth layouts remain dynamic with private/no-store responses.
-- `src/lib/supabase` owns browser/server/proxy clients. `src/lib/auth` owns validated Server Actions, session checks, safe redirect paths, and sanitized identity. There is no service-role client or custom JWT/localStorage authentication.
-- Shared auth components reuse the original tokens, surfaces, controls, and typography. They provide password visibility, inline errors, disabled/pending states, and Zod validation. Signup only requests names, email, and password.
-- Authenticated names replace the dashboard fixture identity. Header identity uses a Google avatar when available, then initials or a generic icon. Upcoming-trip information uses saved user data.
-- Run `npm run test:auth` for nine tests covering redirects, validation, masking, privacy-safe recovery responses, and identity fallbacks. Browser tooling remains isolated in ignored `.qa`. Live email/OAuth/session round trips must be verified after configuring the external project; helper/UI checks alone do not establish that the providers work.
-
-Step 6 adds `GeocodingProvider`/`PlacesProvider` interfaces with Open-Meteo/Overpass adapters, authenticated BFF routes, accessible search, and deliberate attraction discovery. Trip Overview reuses persisted cards without provider calls on render. [backend/README.md](backend/README.md) documents the internal key, forward migration, provider terms/attribution, limits and both development servers. [STEP6_REPORT.md](STEP6_REPORT.md) records implementation and verification. No profile database, onboarding, or additional authentication providers were added.
-
-## Hotel recommendations
-
-Open a saved trip and choose **Hotels**. **Find stays** performs a deliberate search; filters and all five sorts operate on the loaded candidates. Cards keep star classification separate from guest scores and prioritize known total-stay quotes. Replacement asks for confirmation. The selected stay is visible on Hotels and Overview and remains saved when temporary quotes expire.
-
-Local development is configured for clearly labeled demo accommodations without any StayAPI requests. For live inventory, configure `STAYAPI_API_KEY` and `ACCOMMODATION_PROVIDER=stayapi` in **backend/.env**, then restart FastAPI. The key never belongs in the root environment or browser. Production disables fixture search. Read [Accommodation Engine setup](backend/README.md#accommodation-engine) and [STEP7_REPORT.md](STEP7_REPORT.md) for quota behavior, ranking assumptions, storage policy and verification limits. Apply migration `20261028000400_accommodation_selections.sql` before saving a stay; `db:prepare` includes it automatically.
-
-## Food recommendations
-
-Open a saved trip and choose **Food**. **Find food spots** searches around its trusted destination coordinates. Category, cuisine, diet and distance filters refine loaded places; **Search food again** updates the provider pool and deterministic recommendations. Recommended, Distance and Name sorting make no provider calls. Cards use category illustrations and genuine supplied metadata, without fabricated ratings or guessed opening status.
-
-Configure `GEOAPIFY_API_KEY` and `FOOD_PROVIDER=geoapify` only in **backend/.env**, then restart FastAPI. Development also supports explicit `FOOD_PROVIDER=fixture` or **Browse demo food spots** after an error; fixtures are disabled in production. Multiple places can be saved without scheduling them, and removal asks for confirmation. Apply `20261029000500_food_selections.sql` before saving; `db:prepare` includes it. See [Food Engine setup](backend/README.md#food-engine) and [STEP8_REPORT.md](STEP8_REPORT.md) for limits, ranking, source attribution, tests and the remaining external activation steps. Run `npm run test:food` for Food domain, BFF and PostgreSQL/RLS checks.
-
-## AI itinerary planning
-
-Open a saved trip and choose **Itinerary**. Step 9 uses Gemini as a planner over
-trusted trip preferences, discovered attractions and optional saved food/selected
-hotel references. The server validates IDs, dates and pace limits, fills display
-facts from real candidates, then saves an immutable numbered itinerary version
-through signed, trip-owned RPCs. Previous versions remain available.
-
-Set `LLM_PROVIDER=gemini`, `GEMINI_API_KEY` and `GEMINI_MODEL=gemini-3.8-flash` only
-in FastAPI's private environment. Apply `20261029000600_itinerary_versions.sql`
-(included by `npm run db:prepare`). Planning supports 1–14 inclusive days, requires
-discovered attractions, and never guesses venues, prices or travel times. See
-[AI itinerary documentation](docs/features/ai-itinerary.md) for setup, validation, bounded repair behavior,
-development fixtures and manual verification.
-
-## Smart budget engine
-
-Open a saved trip and choose **Budget**. Step 10 uses the trip's saved total budget,
-currency, dates, traveler count and budget style to build a deterministic category
-allocation across accommodation, food, activities, transport and miscellaneous
-spending. Money calculations use application logic rather than the LLM, and monetary
-values are handled with decimal-safe arithmetic.
-
-- Budget styles map to centralized allocation percentages that always total 100%.
-- Known selected-hotel prices can contribute to accommodation spend when a genuine
-  provider amount exists. Food and attraction costs remain unknown unless a trusted
-  provider or the user supplies an amount; NomivraAI does not fabricate prices.
-- Users can add planned or actual expenses, categorized as accommodation, food,
-  activities, transport or miscellaneous. Planned and actual spending remain distinct.
-- The summary exposes total budget, category allocations, known/planned/actual costs,
-  remaining budget, per-person budget, flexible daily budget and deterministic budget
-  health such as **Healthy**, **Watch**, or **Over budget**.
-- Automatic provider-backed costs and manual entries are kept separate so the same
-  expense is not silently counted twice.
-- Budget data is trip-owned and protected by the same authenticated BFF, Supabase RLS,
-  validation and persistence boundaries used elsewhere in the application.
-- The itinerary engine may consume validated budget context, but Gemini is never used
-  for arithmetic, currency conversion or fabricated expense estimates.
-
-Apply `supabase/migrations/20261029000700_trip_budget_entries.sql` before using
-Budget, or apply the private output of `npm run db:prepare`. Manual accommodation
-entries replace the entire automatic hotel quote; mark existing plans actual
-when paid to avoid duplicate costs. No new environment variables are needed.
-See [budget setup and behavior](docs/features/budget-engine.md) and the
-[Step 10 report](docs/history/step-10.md). Run `npm run test:budget` for focused checks.
-
-## Weather intelligence
-
-Open a trip's **Weather** tab and choose **Load forecast** for real daily and
-morning/afternoon/evening forecasts. Trips outside the supported forecast window
-show explicit gaps. Weather stays optional; tab navigation reads cached data.
-On the itinerary, **Adapt itinerary** uses verified weather and deterministic
-conflicts to propose the smallest validated change as a new version. Previous
-versions and manual budget entries stay intact. Gemini never supplies weather facts.
-
-Apply `20261030000800_weather_adaptation.sql` before adaptation. See
-[weather setup, rules and manual verification](docs/features/weather-intelligence.md)
-and the [Step 11 implementation record](docs/history/step-11.md).
-Run `npm run test:weather` for focused checks.
-
+| Guide | Contents |
+| --- | --- |
+| [System architecture](docs/architecture/system-architecture.md) | Service boundaries, persistence, and Companion request flow |
+| [Backend setup](backend/README.md) | Python environment, provider configuration, and migrations |
+| [Database setup](docs/setup/database.md) | Schema, ownership policies, and setup diagnosis |
+| [AI itineraries](docs/features/ai-itinerary.md) | Grounded generation, validation, and versioning |
+| [AI Travel Companion](docs/features/ai-companion.md) | Tools, confirmation flows, and security boundaries |
+| [Budget engine](docs/features/budget-engine.md) | Allocations, expenses, and reconciliation |
+| [Weather intelligence](docs/features/weather-intelligence.md) | Forecasts, conflicts, and itinerary adaptation |
+| [Personalization and memory](docs/history/step-14.md) | Consent, preferences, and private retrieval |
+| [Deployment and operations](docs/deployment/deployment.md) | Vercel/Render setup, export/sharing, and recovery |
+| [Testing and verification](docs/testing/testing.md) | Recorded checks, live observations, and remaining blockers |
